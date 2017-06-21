@@ -159,9 +159,9 @@ def clean_node_tree(node_tree):
 # -----------------------------------------------------------------------------
 # Operator
 
-class IMPORT_OT_image_to_plane(Operator, AddObjectHelper):
+class IMPORT_OT_image_to_grid(Operator, AddObjectHelper):
     """Create mesh plane(s) from image files with the appropiate aspect ratio"""
-    bl_idname = "import_image.to_plane"
+    bl_idname = "import_image.to_grid"
     bl_label = "Import Images as Grids"
     bl_options = {'REGISTER', 'UNDO'}
 
@@ -574,7 +574,7 @@ class IMPORT_OT_image_to_plane(Operator, AddObjectHelper):
 # -----------------------------------------------------------------------------
 # Register
 def import_images_button(self, context):
-    self.layout.operator(IMPORT_OT_image_to_plane.bl_idname,
+    self.layout.operator(IMPORT_OT_image_to_grid.bl_idname,
                          text="Images as Grids", icon='TEXTURE')
 
 

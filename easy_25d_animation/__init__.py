@@ -19,14 +19,14 @@
 # <pep8 compliant>
 
 bl_info = {
-    "name": "Easy 2.5D Animation",
+    "name": "Play2.5D",
     "author": "Zhenjie Zhao",
     "version": (0, 1),
     "blender": (2, 78, 0),
     "location": "3D View",
     "description": "Sketch-based 2.5D Animation Tools",
     "wiki_url": "http://hci.cse.ust.hk/index.html",
-    "support": "TESTING", # must be capital
+    "support": "TESTING",
     "category": "Animation",
 }
 
@@ -46,9 +46,9 @@ import math
 import mathutils
 import bpy
 import bpy.utils.previews
+import bmesh
 from rna_prop_ui import PropertyPanel
-
-# from bpy.app.handlers import persistent
+from bpy.app.handlers import persistent
 from bpy.types import (Panel, Operator, PropertyGroup, UIList, Menu)
 from bpy.props import (StringProperty,
                        BoolProperty,
@@ -57,618 +57,336 @@ from bpy.props import (StringProperty,
                        EnumProperty,
                        PointerProperty)
 
+# depends on sklean
+import numpy as np
+from numpy import linalg as LA
+from sklearn.decomposition import PCA
 
 ################################################################################
-# Animation Part
+# Property:
 ################################################################################
 
-class FollowingPath(bpy.types.Operator):
-    bl_idname = 'animation.following_path'
-    bl_label = 'Rigid Body Transformation'
-    bl_options = {'UNDO'}
-
-    @classmethod
-    def poll(cls, context):
-        return (context.active_object!=None) and (context.scene.grease_pencil!=None)
-
-    def invoke(self, context, event):
-        strokes = context.scene.grease_pencil.layers.active.active_frame.strokes
-        if strokes==None:
-            return {'FINISHED'}
-
-        anim_all_option_check = bpy.data.window_managers['WinMan'].key_points
-        bpy.data.window_managers['WinMan'].key_points = True
-
-        stroke = strokes[-1]
-        sample_nb = len(stroke.points)
-        step = 1
-
-        context.scene.frame_start = 0
-        for i in range(sample_nb):
-            context.scene.frame_current = i
-            context.active_object.location[0] = stroke.points[i].co[0]
-            context.active_object.location[2] = stroke.points[i].co[2]
-            bpy.ops.anim.keyframe_insert_menu(type='LocRotScale')
-
-        context.scene.frame_end = sample_nb
-        bpy.ops.screen.animation_play()
-
-        bpy.data.window_managers['WinMan'].key_points = anim_all_option_check
-        return {'FINISHED'}
-
-
-
-
-
-
-
+class MySettings(PropertyGroup):
+    instance_nb = 6
+    enum_mode = EnumProperty(name='Mode',
+                             description='Different drawing mode',
+                             items=[('IMPORT_MODE', 'Import', ''),
+                                    ('ANIMATION_MODE', "Animation", ""),
+                                    ('CONSTRUCTING_MODE', 'Construction', '')],
+                             default='ANIMATION_MODE')
 
 ################################################################################
-# hairy stuff below for instance-based layout
+# Construction
 ################################################################################
 
-class ObjectStore:
-    current_object = None
-    current_control = None
-    current_object_array = []
+# Property
+class ConstructionProperty:
+    instance_nb = 6
 
-# this is a good example to illustrate the usage of execute, invoke, and modal
-# class Instancing(bpy.types.Operator):
-#     bl_idname = "gpencil.instancing"
-#     bl_label = "Instancing based on strokes"
-#     bl_options = {"UNDO"}
-#
-#     @classmethod
-#     def poll(cls, context):
-#         return (context.area.type == "VIEW_3D")
-#
-#     def __init__(self):
-#         print("Start Invoke")
-#         # bpy.ops.gpencil.draw(mode='DRAW')
-#
-#     def __del__(self):
-#         print("End Invoke")
-#
-#     # def execute(self, context):
-#     #     print('I am execute')
-#     #     return {'FINISHED'}
-#     #
-#     def modal(self, context, event):
-#         if event.type == 'MOUSEMOVE':
-#             # bpy.ops.gpencil.draw('INVOKE_DEFAULT',mode='DRAW')
-#             # self.execute(context)
-#             return {'RUNNING_MODAL'}
-#         if event.type == 'LEFTMOUSE':
-#             if event.value == 'RELEASE':
-#         #     print('rightmouse')
-#                 return {'FINISHED'}
-#             elif event.type == 'PRESS':
-#                 # bpy.ops.gpencil.draw('INVOKE_DEFAULT',mode='DRAW')
-#                 return {'RUNNING_MODAL'}
-#         return {'PASS_THROUGH'}
-#
-#     def invoke(self, context, event):
-#         bpy.ops.gpencil.draw('INVOKE_DEFAULT',mode='DRAW')
-#         print('I am invoke')
-#         # self.execute(context)
-#         context.window_manager.modal_handler_add(self)
-#         return {'RUNNING_MODAL'}
-#
-
-class SelectObject(bpy.types.Operator):
-    bl_idname = "instance.selectobject"
-    bl_label = "Select Object"
+# Operator
+class ConstructionOperatorInstancing(bpy.types.Operator):
+    bl_idname = "construction.instancing"
+    bl_label = "ConstructionOperatorInstancing based on strokes"
     bl_options = {"UNDO"}
-
-    @classmethod
-    def poll(cls, context):
-        return (context.area.type == "VIEW_3D")
-
-    # def __init__(self):
-    #     # print("Start Invoke")
-    #     # bpy.ops.gpencil.draw(mode='DRAW')
-    #
-    # def __del__(self):
-        # print("End Invoke")
-
-    # def execute(self, context):
-    #     print('I am execute')
-    #     return {'FINISHED'}
-    #
-    def modal(self, context, event):
-        if event.type == 'LEFTMOUSE':
-            if event.value == 'RELEASE':
-                ObjectStore.current_object = context.active_object
-                print(ObjectStore.current_object)
-                return {'FINISHED'}
-        return {'PASS_THROUGH'}
-
-    def invoke(self, context, event):
-        bpy.ops.object.mode_set(mode='OBJECT')
-        context.window_manager.modal_handler_add(self)
-        return {'RUNNING_MODAL'}
-
-class Instancing(bpy.types.Operator):
-    bl_idname = "instance.instancing"
-    bl_label = "Instancing based on strokes"
-    bl_options = {"UNDO", 'REGISTER'}
 
     small_depth = 0
 
     @classmethod
     def poll(cls, context):
-        return (context.scene.grease_pencil != None) and ((context.active_object!=None) or (ObjectStore.current_object!=None)) and (context.scene.grease_pencil.layers.active.active_frame.strokes[0]!=None)
+        return (context.scene.grease_pencil != None) and (context.active_object!=None)
 
     def invoke(self, context, event):
+        # import pdb; pdb.set_trace()
         gp = context.scene.grease_pencil
+
         strokes = gp.layers.active.active_frame.strokes
 
-        if gp==None:
-            return {'FINISHED'}
-        if len(strokes)==0:
-            return {'FINISHED'}
-        stroke = strokes[-1]
+        try:
+            stroke = strokes[-1]
+        except IndexError:
+            pass
+        else:
+            verts = []
+            points = stroke.points
+            for j in range(len(stroke.points)):
+                verts.append(points[j].co)
 
-        verts = []
-        points = stroke.points
-        for j in range(len(stroke.points)):
-            verts.append(points[j].co)
-            # print(points[j].co)
+            sampling_nb = min(ConstructionProperty.instance_nb, len(verts))
+            sampling_step = len(verts)/sampling_nb
 
-        sampling_nb = min(MySettings.instance_nb, len(verts))
-        sampling_step = len(verts)/sampling_nb
+            shift = []
+            for i in range(sampling_nb):
+                idx = int(i*sampling_step)
+                if idx<len(verts):
+                    x = verts[idx].x
+                    y = verts[idx].y
+                    z = verts[idx].z
+                    shift.append((x,y,z))
 
-        # bbx_min = sys.maxsize
-        # bbx_max = -sys.maxsize
-        # bbz_min = sys.maxsize
-        # bbz_max = -sys.maxsize
-        # for i in range(len(verts)):
-        #     if verts[i].x < bbx_min:
-        #         bbx_min = verts[i].x
-        #     if verts[i].x > bbx_max:
-        #         bbx_max = verts[i].x
-        #     if verts[i].z < bbz_min:
-        #         bbz_min = verts[i].z
-        #     if verts[i].z > bbz_max:
-        #         bbz_max = verts[i].z
+            # instancing (including animation data)
+            model_obj = context.active_object
+            model_fcurve_x = model_obj.animation_data.action.fcurves[0]
+            model_fcurve_z = model_obj.animation_data.action.fcurves[1]
+            N = len(model_fcurve_x.keyframe_points)
+            for i in range(sampling_nb):
+                new_obj = model_obj.copy()
+                new_obj.data = model_obj.data.copy()
+                # new_obj.location[0] = shift[i][0]
+                new_obj.location[1] = model_obj.location[1] + ConstructionOperatorInstancing.small_depth
+                # new_obj.location[2] = shift[i][2]
 
-        shift = []
-        for i in range(sampling_nb):
-            idx = int(i*sampling_step)
-            if idx<len(verts):
-                x = verts[idx].x# - verts[0].x
-                z = verts[idx].z# - verts[0].z
-                shift.append((x,z))
+                new_obj.animation_data_create()
+                new_obj.animation_data.action = bpy.data.actions.new(name="LocationAnimation")
 
-        # [obj, curve] = mesh.create_curve('test', verts)
-        # curve.fill_mode = 'FULL'
-        # curve.bevel_depth = 0.005
-        # material = bpy.data.materials.new(name="Material")
-        # material.diffuse_color[0] = 0.0
-        # material.diffuse_color[1] = 0.0
-        # material.diffuse_color[2] = 0.0
-        # curve.materials.append(material)
+                fcurve_x = new_obj.animation_data.action.fcurves.new(data_path='location', index=0)
+                fcurve_z = new_obj.animation_data.action.fcurves.new(data_path='location', index=2)
 
-        # for l in gp.layers:
-        #     gp.layers.remove(l)
-        #
-        # ObjectStore.current_control = obj
-        # print(ObjectStore.current_control)
-        #
-        # # the real algorithm goes here
-        #
-        instance_array = []
-        for i in range(sampling_nb):
-            model_obj = None
-            if ObjectStore.current_object != None:
-                model_obj = ObjectStore.current_object
-            else:
-                model_obj = context.active_object
+                x_pre = 0
+                z_pre = 0
+                for k in range(N):
+                    frame_idx = model_fcurve_x.keyframe_points[k].co[0] # (frame index, real f-value)
+                    if k==0:
+                        x_cur = shift[i][0]
+                        z_cur = shift[i][2]
+                    else:
+                        x_cur = model_fcurve_x.keyframe_points[k].co[1]+x_pre2-x_pre
+                        z_cur = model_fcurve_z.keyframe_points[k].co[1]+z_pre2-z_pre
+                    fcurve_x.keyframe_points.insert(frame_idx, x_cur, {'FAST'})
+                    fcurve_z.keyframe_points.insert(frame_idx, z_cur, {'FAST'})
 
-            new_obj = model_obj.copy()
-            new_obj.data = model_obj.data.copy()
+                    x_pre = model_fcurve_x.keyframe_points[k].co[1]
+                    z_pre = model_fcurve_z.keyframe_points[k].co[1]
 
-            new_obj.location[0] = shift[i][0] #+ model_obj.location[0]
-            new_obj.location[1] = model_obj.location[1] + Instancing.small_depth
-            new_obj.location[2] = shift[i][1] #+ model_obj.location[2]
-            new_obj.animation_data_clear()
-            context.scene.objects.link(new_obj)
-            instance_array.append(new_obj)
+                    x_pre2 = x_cur
+                    z_pre2 = z_cur
 
-            Instancing.small_depth += 0.001 # prevent z shadowing
+                context.scene.objects.link(new_obj)
 
-        ObjectStore.current_object_array = instance_array
-        bpy.ops.object.select_all(action='DESELECT')
+                ConstructionOperatorInstancing.small_depth += 0.001 # prevent z shadowing
 
+            bpy.ops.object.select_all(action='DESELECT')
         return {'FINISHED'}
 
-class ReArrangeLayout(bpy.types.Operator):
-    bl_idname = 'layout.relayout'
-    bl_label = 'Update the stroke to relayout the instances'
-    bl_options = {'UNDO', 'REGISTER'}
+class CleanStrokes(bpy.types.Operator):
+    bl_idname = 'layout.cleanstrokes'
+    bl_label = 'Cleaning strokes'
+    bl_options = {'UNDO'}
 
     @classmethod
     def poll(cls, context):
-        return context.scene.grease_pencil.layers.active.active_frame != None
+        return (context.scene.grease_pencil != None) #and (context.scene.grease_pencil.layers.active.active_frame.strokes[-1]!=None)
 
     def invoke(self, context, event):
-        gp = context.scene.grease_pencil
-        scene = context.scene
-
-        strokes = gp.layers.active.active_frame.strokes
-
-        if gp==None:
-            return {'FINISHED'}
-        if len(strokes)==0:
-            return {'FINISHED'}
-
-        bpy.ops.object.mode_set(mode='GPENCIL_EDIT')
-        scene.tool_settings.proportional_edit = 'CONNECTED'
-
-        # for i in range(len)
-
-
-        scene.tool_settings.proportional_size = 1
-
-        bpy.ops.transform.translate()
-
-
-        return {'FINISHED'}
-
-class InstanceFinishing(bpy.types.Operator):
-    bl_idname = 'instance.finish'
-    bl_label = 'Cleaning Tasks'
-    bl_options = {'UNDO'}
-
-    # @classmethod
-    # def poll(cls, context):
-    #     return (ObjectStore.current_control != None) and ((ObjectStore.current_object!=None) or (context.active_object!=None))
-
-    def invoke(self, context, event):
-        # bpy.data.objects.remove(ObjectStore.current_control, do_unlink = True)
-        # for i in range(len(bpy.data.curves)):
-        #     bpy.data.curves.remove(bpy.data.curves[i], do_unlink=True)
         g = context.scene.grease_pencil
         for l in g.layers:
             g.layers.remove(l)
-
-        # works
-        # if ObjectStore.current_object!=None:
-        #     ObjectStore.current_object.location[0] = ObjectStore.current_object.location[0]+0.01
-        #     ObjectStore.current_object.location[0] = ObjectStore.current_object.location[0]-0.01
-        # else:
-        #     context.active_object.location[0] = context.active_object.location[0]+0.01
-        #     context.active_object.location[0] = context.active_object.location[0]-0.01
         return {'FINISHED'}
 
-class CGenerating(bpy.types.Operator):
-    bl_idname = "gpencil.cgenerating"
-    bl_label = "Generate Selected GPencil Strokes"
-    bl_options = {"UNDO"}
+################################################################################
+# Animation
+################################################################################
+
+# Property
+class AnimationProperty():
+    current_frame = 1
+    frame_block_nb = 100
+    sampling_step = 2
+
+# UI
+
+# Operator
+class AnimationOperatorUpdate(bpy.types.Operator):
+    bl_idname = 'animation.animation_update'
+    bl_label = 'Animation Update'
+    bl_options = {'UNDO'}
 
     @classmethod
     def poll(cls, context):
-        scene = context.scene
-        gp = context.scene.grease_pencil
-        return (gp != None) and (len(gp.layers['GP_Layer'].active_frame.strokes)!=0)
+        return (context.active_object!=None)
 
     def invoke(self, context, event):
-        scene = context.scene
-        gp = context.scene.grease_pencil
+        # import pdb; pdb.set_trace()
 
-        sketch_strokes = gp.layers['GP_Layer'].active_frame.strokes
-        construct_strokes = gp.layers['gpl_constructing'].active_frame.strokes
-
-        position = []
-        for i in range(len(construct_strokes)):
-            construct_stroke = construct_strokes[i]
-            for i, point in enumerate(construct_stroke.points):
-                position.append(point.co)
-
-        for k in range(len(position)):
-            for i in range(len(sketch_strokes)):
-                sketch_stroke = sketch_strokes[i]
-                if sketch_stroke.select==True:
-                    new_stroke = sketch_strokes.new(sketch_stroke.colorname)
-                    new_stroke.draw_mode = '3DSPACE'
-                    new_stroke.points.add(count=len(sketch_stroke.points))
-
-                    points = sketch_stroke.points
-                    for i, point in enumerate(points):
-                        new_stroke.points[i].co = points[i].co + position[k]
-
-
-        # nlayer = len(gp.layers)
-        # print('num of layers: ' + str(nlayer))
-        # nframe = {}
-        # for i in nlayer:
-        #     nframe[i] = len(gp.layers[i].frames)
-        #     print('num of frames: ' + str(nframe[i]))
-
-        # https://blender.stackexchange.com/questions/48992/how-to-add-points-to-a-grease-pencil-stroke-or-make-new-one-with-python-script
-        # https://blender.stackexchange.com/questions/24694/query-grease-pencil-strokes-from-python
-        # omit all setups
-        # counter = 0
-        # active_strokes = gp.layers.active.active_frame.strokes
-        # for i in range(len(active_strokes)): # MUST use this pattern!
-        #     old_stroke = active_strokes[i]
-        #     if old_stroke.select==True:
-        #         counter += 1
-        #         # API: https://docs.blender.org/api/current/bpy.types.GPencilStrokes.html#bpy.types.GPencilStrokes.new
-        #         new_stroke = active_strokes.new(old_stroke.colorname)
-        #
-        #         new_stroke.draw_mode = '3DSPACE'
-        #         #new_stroke.color = old_stroke.color
-        #         new_stroke.points.add(count=len(old_stroke.points))
-        #
-        #         points = old_stroke.points
-        #         for i, point in enumerate(points):
-        #             points[i].co = old_stroke.points[i].co + mathutils.Vector((1, 1, 1))
-        return {"FINISHED"}
-
-
-# for constructing scenes
-class CStartRepetition(bpy.types.Operator):
-    bl_idname = "gpencil.cstartrepetition"
-    bl_label = "Start Repetition for Constructing"
-    bl_options = {"UNDO"}
-
-    @classmethod
-    def poll(cls, context):
-        gp = context.scene.grease_pencil
-        return (gp != None) and (gp.layers != None)
-
-    def invoke(self, context, event):
-        scene = context.scene
-        gp = context.scene.grease_pencil
-
-        gpl_constructing = gp.layers.new('gpl_constructing', set_active = True )
-        # if gpl_constructing.frames:
-        #     fr = gpl_constructing.active_frame
-        # else:
-        #     fr = gpl_constructing.frames.new(1)
-        #
-        # str = fr.strokes.new()
-        # str.draw_mode = '3DSPACE'
-
-        return {"FINISHED"}
-
-class MySettings(PropertyGroup):
-    instance_nb = 6
-    b_use_projection = BoolProperty(name="Use Projection", description="", default=False)
-    enum_mode = EnumProperty(name='Mode',
-                             description='Different drawing mode',
-                             items=[#('SKETCHING_MODE', "Sketching", ""),
-                                    ('ANIMATION_MODE', "Animation", ""),
-                                    ('CONSTRUCTING_MODE', 'Constructing', '')],
-                             default='ANIMATION_MODE')
-    # instance_nbr = IntProperty(name="Instancing Number", default=10)
-    # instance_direction = EnumProperty(name='Instancing Direction',
-    #                                   description='Instancing Direction',
-    #                                   items=[('Left', "Left", ""),
-    #                                          ('Right', 'Right', ''),
-    #                                          ('Forward', 'Forward', ''),
-    #                                          ('Backward', 'Backward', '')])
-
-
-class Stroke2Mesh(bpy.types.Operator):
-    bl_idname = 'gpencil.stroke2mesh'
-    bl_label = 'Convert Stroke to Mesh'
-
-    @classmethod
-    def poll(cls, context):
-        gp = context.scene.grease_pencil
-        return (gp!=None) and (gp.layers.active.active_frame.strokes!=None)
-
-    def invoke(self, context, event):
-        scene = context.scene
-        gp = context.scene.grease_pencil
-
-        strokes = gp.layers.active.active_frame.strokes
-        for i in range(len(strokes)):
-            stroke = strokes[i]
-            if stroke.select == True:
-                # create a path
-                verts = []
-                points = stroke.points
-                for j in range(len(stroke.points)):
-                    verts.append(points[j].co)
-
-                curve = mesh.create_curve('test', verts)
-                curve.fill_mode = 'FULL'
-                curve.bevel_depth = 0.005
-                material = bpy.data.materials.new(name="Material")
-                material.diffuse_color[0] = 0.0
-                material.diffuse_color[1] = 0.0
-                material.diffuse_color[2] = 0.0
-                curve.materials.append(material)
-
-
-                # create all triangles
-                # create a new material for triangles
-                material = bpy.data.materials.new(name="Material")
-                triangles = stroke.triangles
-                for j in range(len(triangles)):
-                    v1 = triangles[j].v1
-                    v2 = triangles[j].v2
-                    v3 = triangles[j].v3
-                    co1 = stroke.points[v1].co
-                    co2 = stroke.points[v2].co
-                    co3 = stroke.points[v3].co
-                    obj = mesh.create_triangle('test', [co1, co2, co3])
-                    obj.data.materials.append(material)
-                    obj.show_transparent = True
-                    obj.active_material.diffuse_color[0] = stroke.color.fill_color[0]
-                    obj.active_material.diffuse_color[1] = stroke.color.fill_color[1]
-                    obj.active_material.diffuse_color[2] = stroke.color.fill_color[2]
-                    obj.active_material.alpha = stroke.color.fill_alpha
-        return {"FINISHED"}
-
-#####################################################################
-## Panels
-#####################################################################
-
-class My_GPENCIL_UL_palettecolor(UIList):
-    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
-        # assert(isinstance(item, bpy.types.PaletteColor)
-        palcolor = item
-
-        if self.layout_type in {'DEFAULT', 'COMPACT'}:
-            if palcolor.lock:
-                layout.active = False
-
-            split = layout.split(percentage=0.25)
-            row = split.row(align=True)
-            row.enabled = not palcolor.lock
-            row.prop(palcolor, "color", text="", emboss=palcolor.is_stroke_visible)
-            row.prop(palcolor, "fill_color", text="", emboss=palcolor.is_fill_visible)
-            split.prop(palcolor, "name", text="", emboss=False)
-
-            row = layout.row(align=True)
-            row.prop(palcolor, "lock", text="", emboss=False)
-            row.prop(palcolor, "hide", text="", emboss=False)
-
-        elif self.layout_type == 'GRID':
-            layout.alignment = 'CENTER'
-            layout.label(text="", icon_value=icon)
-
-class My_GPENCIL_UL_layer(UIList):
-    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
-        # assert(isinstance(item, bpy.types.GPencilLayer)
-        gpl = item
-
-        if self.layout_type in {'DEFAULT', 'COMPACT'}:
-            if gpl.lock:
-                layout.active = False
-
-            row = layout.row(align=True)
-            if gpl.is_parented:
-                icon = 'BONE_DATA'
+        obj = context.active_object
+        if context.scene.enum_brushes=='FOLLOWPATH':
+            strokes = AnimationBrushes.brush_dict['FOLLOWPATH'].active_frame.strokes
+            try:
+                stroke = strokes[-1]
+            except IndexError:
+                pass
             else:
-                icon = 'BLANK1'
+                obj.animation_data_create()
+                obj.animation_data.action = bpy.data.actions.new(name="LocationAnimation")
 
-            row.label(text="", icon=icon)
-            row.prop(gpl, "info", text="", emboss=False)
+                N = len(stroke.points)
 
-            row = layout.row(align=True)
-            row.prop(gpl, "lock", text="", emboss=False)
-            row.prop(gpl, "hide", text="", emboss=False)
-            row.prop(gpl, "unlock_color", text="", emboss=False)
-        elif self.layout_type == 'GRID':
-            layout.alignment = 'CENTER'
-            layout.label(text="", icon_value=icon)
+                fcurve_x = obj.animation_data.action.fcurves.new(data_path='location', index=0)
+                fcurve_z = obj.animation_data.action.fcurves.new(data_path='location', index=2)
+
+                i = 0
+                while int(i*AnimationProperty.sampling_step) < N:
+                    idx = int(i*AnimationProperty.sampling_step)
+                    position = stroke.points[idx].co
+                    fcurve_x.keyframe_points.insert(AnimationProperty.current_frame+idx, position[0], {'FAST'})
+                    fcurve_z.keyframe_points.insert(AnimationProperty.current_frame+idx, position[2], {'FAST'})
+                    i+=1
+
+        elif context.scene.enum_brushes=='HPOINT':
+            mesh = obj.data
+            mesh.animation_data_create()
+            action = bpy.data.actions.new(name='MeshAnimation')
+            mesh.animation_data.action = action
+
+            # Point handler
+            pca = PCA(n_components=2)
+            strokes = AnimationBrushes.brush_dict['HPOINT'].active_frame.strokes
+            stroke = strokes[-1]
+
+            phandler = stroke.points[0].co.xyz
+            ppath = [p.co.xz for p in stroke.points]
+            phandler = np.array(phandler)
+            ppath = np.array(ppath) # the size is correct, amazing
+
+            #PCA
+            res = pca.fit(ppath).transform(ppath)
+            res[:,1] = 0.0
+            new_ppath = pca.inverse_transform(res)
+            new_phandler = phandler
+
+            # proportional based linear blend skinning
+            (nframe, ndim) = new_ppath.shape
+            delta_list = []
+            for i in range(1, nframe):
+                t0 = new_ppath[i, 0] - new_ppath[i-1, 0]
+                t1 = new_ppath[i, 1] - new_ppath[i-1, 1]
+                delta_list.append((t0, t1))
+
+            weight = {}
+            matrix_world = obj.matrix_world
+            for vert in mesh.vertices:
+                v_co_world = np.array(matrix_world*vert.co)
+                dist = LA.norm(v_co_world-new_phandler, 2)
+                weight[vert.index] = np.exp(-dist)
+
+            normalized_delta_list = []
+            for i in range(AnimationProperty.frame_block_nb):
+                normalized_delta_list.append(delta_list[i%len(delta_list)])
+
+            frames = [AnimationProperty.current_frame+i for i in range(AnimationProperty.frame_block_nb)]
+
+            for vert in mesh.vertices:
+                fcurve_x = action.fcurves.new('vertices[%d].co'%vert.index, index=0)
+                fcurve_y = action.fcurves.new('vertices[%d].co'%vert.index, index=1)
+                co_kf_x = vert.co[0]
+                co_kf_y = vert.co[1]
+                for frame, val in zip(frames, normalized_delta_list):
+                    co_kf_x += weight[vert.index]*val[0]
+                    co_kf_y += weight[vert.index]*val[1]
+                    fcurve_x.keyframe_points.insert(frame, co_kf_x, {'FAST'})
+                    fcurve_y.keyframe_points.insert(frame, co_kf_y, {'FAST'})
+
+        return {'FINISHED'}
+
+# Handler
+class AnimationBrushes:
+    gp = None
+    brush_dict = {}
+
+def AnimationHandlerUpdateBrushes(self, context):
+    if AnimationBrushes.gp == None:
+        AnimationBrushes.gp = bpy.data.grease_pencil.new('AnimationPencil')
+
+    gp = AnimationBrushes.gp
+    context.scene.grease_pencil = gp
+
+    if 'FOLLOWPATH' not in AnimationBrushes.brush_dict:
+        layer = gp.layers.new('FOLLOWPATH')
+        layer.tint_color = (1.0, 0.0, 0.0)
+        layer.tint_factor = 1.0
+        AnimationBrushes.brush_dict['FOLLOWPATH'] = layer
+    if 'HPOINT' not in AnimationBrushes.brush_dict:
+        layer = gp.layers.new('HPOINT')
+        layer.tint_color = (0.5, 0.5, 0.5)
+        layer.tint_factor = 1.0
+        AnimationBrushes.brush_dict['HPOINT'] = layer
+
+    if context.scene.enum_brushes!=None:
+        gp.layers.active = AnimationBrushes.brush_dict[context.scene.enum_brushes]
+
+    return None
+
+################################################################################
+# Recording
+################################################################################
+
+class RecordingData:
+    start_frame = []
+    end_frame = []
+
+# Property
+class RecordingPropertyItem(bpy.types.PropertyGroup):
+    name = bpy.props.StringProperty(name='Name', default='')
+    index = bpy.props.IntProperty(name='Index', default=0)
+    start_frame = bpy.props.IntProperty(name='Startframe', default=0)
+    end_frame = bpy.props.IntProperty(name='Endframe', default=0)
+
+# UI
+class RecordingUIListItem(UIList):
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+        split = layout.split(0.3)
+        split.prop(item, "name", text="", emboss=False, icon='CLIP')
+        split.label('Start: %d' % RecordingData.start_frame[index])
+        split.label('End: %d' % RecordingData.end_frame[index])
+
+# Operator
+# https://blender.stackexchange.com/questions/30444/create-an-interface-which-is-similar-to-the-material-list-box
+class RecordingOperatorListAction(bpy.types.Operator):
+    bl_idname = 'recording.list_action'
+    bl_label = 'List Action'
+
+    def invoke(self, context, event):
+        scene = context.scene
+
+        item = scene.recording_array.add()
+        item.id = len(scene.recording_array)
+        item.name = 'Recording-%d'%len(scene.recording_array)
+        item.index = len(scene.recording_array)
+        scene.recording_index = (len(scene.recording_array)-1)
+
+        RecordingData.start_frame.append(AnimationProperty.current_frame)
+        RecordingData.end_frame.append(AnimationProperty.current_frame+AnimationProperty.frame_block_nb-1)
+        AnimationProperty.current_frame+=AnimationProperty.frame_block_nb
+
+        return {"FINISHED"}
 
 
+################################################################################
+# Main UI:
+################################################################################
 
-
-class NotInterestingPanel1(Panel):
+class CameraUIPanel(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'TOOLS'
 
-    bl_idname = 'OBJECT_PT_notinerestingpanel1'
-    bl_label = 'Not Interesting Panel 1'
-    bl_context = 'objectmode'
-    bl_category = 'StayTuned'
+    bl_idname = 'OBJECT_PT_camera_path'
+    bl_label = 'Camera Path'
+    bl_category = 'Play2.5D'
 
     def draw(self, context):
         layout = self.layout
-        gp = context.scene.grease_pencil
-        view = context.space_data
-        world = context.scene.world
-        box = layout.box()
-        box.label('World Settings')
-        row = box.row()
-        split = row.split(percentage=0.55)
-        split.prop(view, "show_floor", text="Show Floor")
-        split.prop(view, "show_axis_x", text="X", toggle=True)
-        split.prop(view, "show_axis_y", text="Y", toggle=True)
-        split.prop(view, "show_axis_z", text="Z", toggle=True)
-
-        box.column().prop(view, 'show_world', text='Show World')
-        # box.column().prop(world, 'use_sky_paper', text='Use Skey Color')
-        # box.column().prop(world, 'use_sky_blend', text='Use Ground Color')
-        row = box.row()
-        row.column().prop(world, "horizon_color", text="Ground Color")
-        # row.column().prop(world, "zenith_color", text='Sky Color')
-
-class NotInterestingPanel2(Panel):
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'TOOLS'
-
-    bl_idname = 'OBJECT_PT_notinerestingpanel2'
-    bl_label = 'Not Interesting Panel 2'
-    bl_context = 'objectmode'
-    bl_category = 'StayTuned'
-
-    def draw(self, context):
-        layout = self.layout
-        gp = context.scene.grease_pencil
+        camera = context.scene.objects['Camera']
+        assert(camera!=None)
 
         box = layout.box()
-        box.label('Color Palette')
-        palette = context.active_gpencil_palette
-        if palette != None:
-            # Palette colors
-            row = box.row()
-            col = row.column()
-            if len(palette.colors) >= 2:
-                color_rows = 2
-            else:
-                color_rows = 2
-            col.template_list("My_GPENCIL_UL_palettecolor", "", palette, "colors", palette.colors, "active_index",
-                              rows=color_rows)
-
-            col = row.column()
-            sub = col.column(align=True)
-            sub.operator("gpencil.palettecolor_add", icon='ZOOMIN', text="")
-            sub.operator("gpencil.palettecolor_remove", icon='ZOOMOUT', text="")
-
-            pcolor = palette.colors.active
-            if pcolor:
-                self.draw_palettecolors(box, pcolor)
-
-        box = layout.box()
-        box.label('Painting Layers')
-        if gp!=None:
-            if len(gp.layers) >= 2:
-                layer_rows = 2
-            else:
-                layer_rows = 2
-            box.template_list("My_GPENCIL_UL_layer", "", gp, "layers", gp.layers, "active_index", rows=layer_rows)
-
-    # Draw palette colors
-    def draw_palettecolors(self, layout, pcolor):
-        # color settings
-        split = layout.split(percentage=0.5)
-        split.active = not pcolor.lock
-
-        # Column 1 - Stroke
-        col = split.column(align=True)
-        col.enabled = not pcolor.lock
-        col.prop(pcolor, "color", text="Stroke Color")
-        col.prop(pcolor, "alpha", slider=True)
-
-        # Column 2 - Fill
-        col = split.column(align=True)
-        col.enabled = not pcolor.lock
-        col.prop(pcolor, "fill_color", text="Filling Color")
-        col.prop(pcolor, "fill_alpha", text="Opacity", slider=True)
-
-        # Options
-        split = layout.split(percentage=0.5)
-        split.active = not pcolor.lock
-
+        box.prop(camera, 'location', text='')
 
 class MyUIPanel(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'TOOLS'
 
     bl_idname = 'OBJECT_PT_easy_animation'
-    bl_label = 'Easy Animation'
-    bl_context = 'objectmode'
-    bl_category = 'Easy Animation'
-
-
+    bl_label = 'Animation'
+    bl_category = 'Play2.5D'
 
     def draw(self, context):
         layout = self.layout
@@ -679,116 +397,84 @@ class MyUIPanel(Panel):
         my_settings = scene.my_settings
         box.prop(my_settings, 'enum_mode', text='')
 
-        # if my_settings.enum_mode == 'SKETCHING_MODE':
-        #     box = layout.box()
-        #     box.label('Drawing')
-        #     row = box.row()
-        #     row.operator('gpencil.draw', text='Pencil', icon='GREASEPENCIL').mode = 'DRAW'
-        #     row.operator('gpencil.draw', text='Eraser', icon='FORCE_CURVE').mode = 'ERASER'
-
-        if my_settings.enum_mode == 'CONSTRUCTING_MODE':
-            box = layout.box()
-            box.label('Layout')
-            box.prop(context.active_object, 'location', text='Object Location')
-
-            box = layout.box()
-            box.label('Instancing')
+        if my_settings.enum_mode == 'IMPORT_MODE':
             column = box.column()
-            column.operator('instance.selectobject', text='Select', icon='GREASEPENCIL')
-            column.separator()
-            column.operator('gpencil.draw', text='Drawing', icon='GREASEPENCIL').mode = 'DRAW'
-            column.prop(my_settings, 'b_use_projection', text='Projection')
-            column.operator('instance.instancing', text='Instancing', icon='GREASEPENCIL')
-            # column.separator()
-            # column.prop(my_settings, 'instance_nbr', text='Instancing Number')
-            # column.prop(my_settings, 'instance_direction', text='Direction')
-            # column.operator('instance.instancing', text='Updating', icon='GREASEPENCIL')
+            column.operator('import_image.to_grid', text='Import', icon='GREASEPENCIL')
 
+        elif my_settings.enum_mode == 'CONSTRUCTING_MODE':
+            column = box.column()
+            column.operator('construction.instancing', text='Instancing', icon='GREASEPENCIL')
             column.separator()
-            column.operator('layout.relayout', text='Relayout', icon='GREASEPENCIL')
-            column.separator()
-            column.operator('instance.finish', text='Clean Strokes', icon='GREASEPENCIL')
-
-
-            # TODO, this is a rather bad design, replace it later
-            # row.operator('gpencil.editmode_toggle', text='Start Constructing Mode', icon='POSE_DATA')
-            # row.operator('gpencil.select_border', text='Border Select', icon='BORDER_RECT')
-            # row.operator('gpencil.select_all', text='Deselect All', icon='CANCEL')
-            #
-            # column = box.column()
-            # column.operator('gpencil.stroke2mesh', text='Object', icon='COPYDOWN')
-            #
-            # column = box.column()
-            # column.operator('gpencil.cstartrepetition', text='Start', icon='COPYDOWN')
-            # column.operator('gpencil.draw', text='Draw', icon='GREASEPENCIL').mode = 'DRAW'
-            # column.operator('gpencil.cgenerating', text='Generate', icon='COPYDOWN')
+            column.operator('layout.cleanstrokes', text='Clean Strokes', icon='GREASEPENCIL')
 
         elif my_settings.enum_mode == 'ANIMATION_MODE':
-            box = layout.box()
-            box.label('Animating')
-            row = box.row()
-            if not scene.use_preview_range:
-                row.prop(scene, "frame_start", text="Start")
-                row.prop(scene, "frame_end", text="End")
-            else:
-                row.prop(scene, "frame_preview_start", text="Start")
-                row.prop(scene, "frame_preview_end", text="End")
+            # row = box.row()
+            # if not scene.use_preview_range:
+            #     row.prop(scene, "frame_start", text="Start")
+            #     row.prop(scene, "frame_end", text="End")
+            # else:
+            #     row.prop(scene, "frame_preview_start", text="Start")
+            #     row.prop(scene, "frame_preview_end", text="End")
+            # column = box.column()
+            # if context.screen.is_animation_playing==True:
+            #     column.operator("screen.animation_play", text="", icon='PAUSE')
+            # else:
+            #     column.operator('screen.animation_play', text='Play', icon='RIGHTARROW')
+            # column.separator()
+            # column.operator('animation.following_path', text='Following Path', icon='GREASEPENCIL')
+
             column = box.column()
-            column.operator('screen.animation_play', text='Play', icon='RIGHTARROW')
+            column.prop(context.scene, 'enum_brushes', text='Brushes', icon='GREASEPENCIL')
             column.separator()
-            column.operator('animation.following_path', text='Following Path', icon='GREASEPENCIL')
+            column.operator('animation.animation_update', text='Update', icon='GREASEPENCIL')
+            column.separator()
+            column.operator('layout.cleanstrokes', text='Clean Strokes', icon='GREASEPENCIL')
 
-
-# class DirectionPieMenu(Menu):
-#     bl_idname = 'OBJECT_MT_direction_pie_menu'
-#     bl_label = "Select Direction"
-#
-#     def draw(self, context):
-#         layout = self.layout
-#
-#         pie = layout.menu_pie()
-#         pie.operator_enum("mesh.select_mode", "type")
-
-class CameraUIPanel(Panel):
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'TOOLS'
-
-    bl_idname = 'OBJECT_PT_camera_path'
-    bl_label = 'Camera Path'
-    bl_context = 'objectmode'
-    bl_category = 'Easy Animation'
-
-    def draw(self, context):
-        layout = self.layout
-        camera = context.scene.objects['Camera']
+        for i in range(24):
+            layout.split()
 
         box = layout.box()
-        box.prop(camera, 'location', text='')
+        box.label('Record')
+        row = box.row()
+        col = row.column()
+        col.template_list('RecordingUIListItem', '', scene, 'recording_array', scene, 'recording_index')
 
+        col = box.column()
+        col.operator('recording.list_action', icon='ZOOMIN', text='Add')
+
+
+
+################################################################################
+# Logic:
+################################################################################
 
 def register():
-    # from bpy.utils import register_class
-    # for cls in classes:
-    #     register_class(cls)
-    # bpy.utils.register_class(DirectionPieMenu)
-    # wm = bpy.context.window_manager
-    # km = wm.keyconfigs.addon.keymaps.new(name="Object Mode" )
-    # kmi = km.keymap_items.new('wm.call_menu_pie', 'SPACE', 'PRESS').properties.name='OBJECT_MT_direction_pie_menu'
-
     bpy.utils.register_module(__name__)
-    # bpy.app.handlers.scene_update_pre.append(setIt)
-    # bpy.app.handlers.load_post.append(setIt)
+
     bpy.types.Scene.my_settings = PointerProperty(type=MySettings)
 
+    # Animation
+    bpy.types.Scene.enum_brushes = EnumProperty(name='Brushes',
+                                                description='Different Brushes',
+                                                items=[('', "", ""),
+                                                       ('FOLLOWPATH','Follow Path',''),
+                                                       # ('ANCHOR', "Anchor", ""), ('RIGID', "Rigid", ""),
+                                                       ('HPOINT','Handle Point','')],
+                                                default='',
+                                                update=AnimationHandlerUpdateBrushes)
+
+    # Recording
+    bpy.types.Scene.recording_array = bpy.props.CollectionProperty(type=RecordingPropertyItem)
+    bpy.types.Scene.recording_index = bpy.props.IntProperty()
 
 def unregister():
-    # from bpy.utils import unregister_class
-    # for cls in classes:
-    #     unregister_class(cls)
-    # bpy.utils.unregister_class(DirectionPieMenu)
     bpy.utils.unregister_module(__name__)
-    # bpy.app.handlers.load_post.remove(setIt)
+
     del bpy.types.Scene.my_settings
+
+    # Recording
+    del bpy.types.Scene.recording_array
+    del bpy.types.Scene.recording_index
 
 if __name__ == "__main__" :
     register()
