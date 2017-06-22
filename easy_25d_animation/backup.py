@@ -687,3 +687,19 @@
 #
 #         bpy.data.window_managers['WinMan'].key_points = anim_all_option_check
 #         return {'FINISHED'}
+
+
+            # row = box.row()
+            # if not scene.use_preview_range:
+            #     row.prop(scene, "frame_start", text="Start")
+            #     row.prop(scene, "frame_end", text="End")
+            # else:
+            #     row.prop(scene, "frame_preview_start", text="Start")
+            #     row.prop(scene, "frame_preview_end", text="End")
+            # column = box.column()
+            # if context.screen.is_animation_playing==True:
+            #     column.operator("screen.animation_play", text="", icon='PAUSE')
+            # else:
+            #     column.operator('screen.animation_play', text='Play', icon='RIGHTARROW')
+            # column.separator()
+            # column.operator('animation.following_path', text='Following Path', icon='GREASEPENCIL')

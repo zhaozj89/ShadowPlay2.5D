@@ -63,17 +63,57 @@ from numpy import linalg as LA
 from sklearn.decomposition import PCA
 
 ################################################################################
-# Property:
+# Global
 ################################################################################
 
 class MySettings(PropertyGroup):
     instance_nb = 6
     enum_mode = EnumProperty(name='Mode',
                              description='Different drawing mode',
-                             items=[('IMPORT_MODE', 'Import', ''),
-                                    ('ANIMATION_MODE', "Animation", ""),
-                                    ('CONSTRUCTING_MODE', 'Construction', '')],
-                             default='ANIMATION_MODE')
+                             items=[('IMPORT_MODE','Import',''),
+                                    ('CONSTRUCTING_MODE','Construction',''),
+                                    ('ANIMATION_MODE','Animation','')],
+                             default='IMPORT_MODE')
+
+class MySettingOperatorPlay(bpy.types.Operator):
+    bl_idname = 'mysetting.play'
+    bl_label = 'MySetting Play'
+    bl_options = {'UNDO'}
+
+    def invoke(self, context, event):
+        scene = context.scene
+        scene.frame_start = AnimationProperty.current_frame
+        scene.frame_end = AnimationProperty.current_frame+AnimationProperty.frame_block_nb-1
+
+        bpy.ops.screen.animation_play()
+        if context.screen.is_animation_playing==False:
+            scene.frame_current = AnimationProperty.current_frame
+
+        return {'FINISHED'}
+
+
+class MySettingOperatorReset(bpy.types.Operator):
+    bl_idname = 'mysetting.reset'
+    bl_label = 'MySetting Reset'
+    bl_options = {'UNDO'}
+
+    def invoke(self, context, event):
+        bpy.ops.wm.read_homefile()
+        bpy.ops.wm.addon_refresh()
+        return {'FINISHED'}
+
+class MySettingOperatorRender(bpy.types.Operator):
+    bl_idname = 'mysetting.render'
+    bl_label = 'MySetting Render'
+    bl_options = {'UNDO'}
+
+    def invoke(self, context, event):
+        scene = context.scene
+        scene.frame_start = 1
+        scene.frame_end = 20 #AnimationProperty.current_frame+AnimationProperty.frame_block_nb-1
+
+        bpy.ops.render.render(animation=True)
+        return {'FINISHED'}
 
 ################################################################################
 # Construction
@@ -86,7 +126,7 @@ class ConstructionProperty:
 # Operator
 class ConstructionOperatorInstancing(bpy.types.Operator):
     bl_idname = "construction.instancing"
-    bl_label = "ConstructionOperatorInstancing based on strokes"
+    bl_label = "Instancing based on strokes"
     bl_options = {"UNDO"}
 
     small_depth = 0
@@ -98,7 +138,6 @@ class ConstructionOperatorInstancing(bpy.types.Operator):
     def invoke(self, context, event):
         # import pdb; pdb.set_trace()
         gp = context.scene.grease_pencil
-
         strokes = gp.layers.active.active_frame.strokes
 
         try:
@@ -108,8 +147,8 @@ class ConstructionOperatorInstancing(bpy.types.Operator):
         else:
             verts = []
             points = stroke.points
-            for j in range(len(stroke.points)):
-                verts.append(points[j].co)
+            for i in range(len(stroke.points)):
+                verts.append(points[i].co)
 
             sampling_nb = min(ConstructionProperty.instance_nb, len(verts))
             sampling_step = len(verts)/sampling_nb
@@ -125,43 +164,61 @@ class ConstructionOperatorInstancing(bpy.types.Operator):
 
             # instancing (including animation data)
             model_obj = context.active_object
-            model_fcurve_x = model_obj.animation_data.action.fcurves[0]
-            model_fcurve_z = model_obj.animation_data.action.fcurves[1]
-            N = len(model_fcurve_x.keyframe_points)
+
+            # make some flags
+            is_copy_animation = (model_obj.animation_data!=None)
+            is_projection = context.scene.is_projection
+
+            if is_copy_animation:
+                model_fcurve_x = model_obj.animation_data.action.fcurves[0]
+                model_fcurve_z = model_obj.animation_data.action.fcurves[1]
+                N = len(model_fcurve_x.keyframe_points)
+
             for i in range(sampling_nb):
                 new_obj = model_obj.copy()
                 new_obj.data = model_obj.data.copy()
-                # new_obj.location[0] = shift[i][0]
-                new_obj.location[1] = model_obj.location[1] + ConstructionOperatorInstancing.small_depth
-                # new_obj.location[2] = shift[i][2]
 
-                new_obj.animation_data_create()
-                new_obj.animation_data.action = bpy.data.actions.new(name="LocationAnimation")
+                if is_projection:
+                    new_obj.location[1] = model_obj.location[1] + i*shift[i][2] # z denotes depth
+                else:
+                    new_obj.location[1] = model_obj.location[1] + ConstructionOperatorInstancing.small_depth
 
-                fcurve_x = new_obj.animation_data.action.fcurves.new(data_path='location', index=0)
-                fcurve_z = new_obj.animation_data.action.fcurves.new(data_path='location', index=2)
+                if is_copy_animation:
+                    new_obj.animation_data_create()
+                    new_obj.animation_data.action = bpy.data.actions.new(name="LocationAnimation")
 
-                x_pre = 0
-                z_pre = 0
-                for k in range(N):
-                    frame_idx = model_fcurve_x.keyframe_points[k].co[0] # (frame index, real f-value)
-                    if k==0:
-                        x_cur = shift[i][0]
-                        z_cur = shift[i][2]
+                    fcurve_x = new_obj.animation_data.action.fcurves.new(data_path='location', index=0)
+                    fcurve_z = new_obj.animation_data.action.fcurves.new(data_path='location', index=2)
+
+                    x_pre = 0
+                    z_pre = 0
+
+                    for k in range(N):
+                        frame_idx = model_fcurve_x.keyframe_points[k].co[0] # (frame index, real f-value)
+                        if k==0:
+                            x_cur = shift[i][0]
+                            z_cur = shift[i][2]
+                        else:
+                            x_cur = model_fcurve_x.keyframe_points[k].co[1]+x_pre2-x_pre
+                            z_cur = model_fcurve_z.keyframe_points[k].co[1]+z_pre2-z_pre
+                        fcurve_x.keyframe_points.insert(frame_idx, x_cur, {'FAST'})
+                        fcurve_z.keyframe_points.insert(frame_idx, z_cur, {'FAST'})
+
+                        x_pre = model_fcurve_x.keyframe_points[k].co[1]
+                        z_pre = model_fcurve_z.keyframe_points[k].co[1]
+
+                        x_pre2 = x_cur
+                        z_pre2 = z_cur
+                else:
+                    if is_projection:
+                        new_obj.location[0] = shift[0][0]
+                        new_obj.location[2] = shift[0][2]
                     else:
-                        x_cur = model_fcurve_x.keyframe_points[k].co[1]+x_pre2-x_pre
-                        z_cur = model_fcurve_z.keyframe_points[k].co[1]+z_pre2-z_pre
-                    fcurve_x.keyframe_points.insert(frame_idx, x_cur, {'FAST'})
-                    fcurve_z.keyframe_points.insert(frame_idx, z_cur, {'FAST'})
+                        new_obj.location[0] = shift[i][0]
+                        new_obj.location[2] = shift[i][2]
 
-                    x_pre = model_fcurve_x.keyframe_points[k].co[1]
-                    z_pre = model_fcurve_z.keyframe_points[k].co[1]
-
-                    x_pre2 = x_cur
-                    z_pre2 = z_cur
 
                 context.scene.objects.link(new_obj)
-
                 ConstructionOperatorInstancing.small_depth += 0.001 # prevent z shadowing
 
             bpy.ops.object.select_all(action='DESELECT')
@@ -322,6 +379,8 @@ def AnimationHandlerUpdateBrushes(self, context):
 class RecordingData:
     start_frame = []
     end_frame = []
+    camera_fcurve_x = None
+    camera_fcurve_y = None
 
 # Property
 class RecordingPropertyItem(bpy.types.PropertyGroup):
@@ -353,17 +412,40 @@ class RecordingOperatorListAction(bpy.types.Operator):
         item.index = len(scene.recording_array)
         scene.recording_index = (len(scene.recording_array)-1)
 
+        # add camera animation
+        obj = bpy.data.objects['Camera']
+        if obj.animation_data==None:
+            obj.animation_data_create()
+            obj.animation_data.action = bpy.data.actions.new(name='LocationAnimation')
+            RecordingData.camera_fcurve_x = obj.animation_data.action.fcurves.new(data_path='location', index=0)
+            RecordingData.camera_fcurve_y = obj.animation_data.action.fcurves.new(data_path='location', index=1)
+
+        position = obj.location
+        RecordingData.camera_fcurve_x.keyframe_points.insert(AnimationProperty.current_frame, position[0], {'FAST'})
+        RecordingData.camera_fcurve_y.keyframe_points.insert(AnimationProperty.current_frame, position[1], {'FAST'})
+
         RecordingData.start_frame.append(AnimationProperty.current_frame)
         RecordingData.end_frame.append(AnimationProperty.current_frame+AnimationProperty.frame_block_nb-1)
         AnimationProperty.current_frame+=AnimationProperty.frame_block_nb
 
         return {"FINISHED"}
 
-
 ################################################################################
-# Main UI:
+# Camera
 ################################################################################
 
+# Operator
+class CameraOperatorSetting(bpy.types.Operator):
+    bl_idname = 'camera.setting'
+    bl_label = 'Camera Setting'
+    bl_options = {'UNDO'}
+
+    def invoke(self, context, event):
+        context.scene.cursor_location.x = context.scene.objects['Camera'].location.x
+        context.scene.cursor_location.y = context.scene.objects['Camera'].location.y+2.5
+        return {'FINISHED'}
+
+# UI
 class CameraUIPanel(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'TOOLS'
@@ -378,13 +460,20 @@ class CameraUIPanel(Panel):
         assert(camera!=None)
 
         box = layout.box()
-        box.prop(camera, 'location', text='')
+        box.prop(camera, 'location', text='LF/RT', index=0)
+        box.prop(camera, 'location', text='FWD/BWD', index=1)
+        box.separator()
+        box.operator('camera.setting', text='Set', icon='RENDER_STILL')
 
-class MyUIPanel(Panel):
+################################################################################
+# Main UI:
+################################################################################
+
+class MainUIPanel(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'TOOLS'
 
-    bl_idname = 'OBJECT_PT_easy_animation'
+    bl_idname = 'OBJECT_PT_2.5d_animation'
     bl_label = 'Animation'
     bl_category = 'Play2.5D'
 
@@ -399,51 +488,74 @@ class MyUIPanel(Panel):
 
         if my_settings.enum_mode == 'IMPORT_MODE':
             column = box.column()
-            column.operator('import_image.to_grid', text='Import', icon='GREASEPENCIL')
+            column.operator('import_image.to_grid', text='Import', icon='FILE_FOLDER')
 
         elif my_settings.enum_mode == 'CONSTRUCTING_MODE':
             column = box.column()
-            column.operator('construction.instancing', text='Instancing', icon='GREASEPENCIL')
+            column.prop(context.scene, 'is_projection')
+            column.operator('construction.instancing', text='Instancing', icon='BOIDS')
             column.separator()
-            column.operator('layout.cleanstrokes', text='Clean Strokes', icon='GREASEPENCIL')
+            column.operator('layout.cleanstrokes', text='Clean Strokes', icon='MESH_CAPSULE')
 
         elif my_settings.enum_mode == 'ANIMATION_MODE':
-            # row = box.row()
-            # if not scene.use_preview_range:
-            #     row.prop(scene, "frame_start", text="Start")
-            #     row.prop(scene, "frame_end", text="End")
-            # else:
-            #     row.prop(scene, "frame_preview_start", text="Start")
-            #     row.prop(scene, "frame_preview_end", text="End")
-            # column = box.column()
-            # if context.screen.is_animation_playing==True:
-            #     column.operator("screen.animation_play", text="", icon='PAUSE')
-            # else:
-            #     column.operator('screen.animation_play', text='Play', icon='RIGHTARROW')
-            # column.separator()
-            # column.operator('animation.following_path', text='Following Path', icon='GREASEPENCIL')
-
             column = box.column()
-            column.prop(context.scene, 'enum_brushes', text='Brushes', icon='GREASEPENCIL')
+            column.prop(context.scene, 'enum_brushes', text='Brushes')
             column.separator()
-            column.operator('animation.animation_update', text='Update', icon='GREASEPENCIL')
+            column.operator('animation.animation_update', text='Update', icon='ANIM')
             column.separator()
-            column.operator('layout.cleanstrokes', text='Clean Strokes', icon='GREASEPENCIL')
+            column.operator('layout.cleanstrokes', text='Clean Strokes', icon='MESH_CAPSULE')
 
-        for i in range(24):
+        for i in range(3):
+            layout.split()
+
+        box = layout.box()
+        box.label('Tools')
+        col = box.column()
+        row=col.row(align=True)
+        row.operator('gpencil.draw', text='Draw', icon='BRUSH_DATA').mode='DRAW'
+        row.operator('transform.resize', text='Scale', icon='VIEWZOOM')
+        row=col.row(align=True)
+        row.operator('ed.undo', text='Undo', icon='BACK')
+        row.operator('ed.redo', text='Redo', icon='FORWARD')
+        if context.screen.is_animation_playing==True:
+            col.operator("mysetting.play", text="Pause", icon='PAUSE')
+        else:
+            col.operator('mysetting.play', text='Preview', icon='RIGHTARROW')
+        col.operator('mysetting.reset', text='Reset', icon='HAND')
+
+        for i in range(3):
             layout.split()
 
         box = layout.box()
         box.label('Record')
         row = box.row()
         col = row.column()
-        col.template_list('RecordingUIListItem', '', scene, 'recording_array', scene, 'recording_index')
+        col.template_list('RecordingUIListItem', '', scene, 'recording_array', scene, 'recording_index', rows=2)
 
         col = box.column()
         col.operator('recording.list_action', icon='ZOOMIN', text='Add')
 
+class RenderingUIPanel(Panel):
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'TOOLS'
 
+    bl_idname = 'OBJECT_PT_rendering'
+    bl_label = 'Rendering'
+    bl_category = 'Play2.5D'
 
+    def draw(self, context):
+        layout = self.layout
+        # scene = context.scene
+        rd = context.scene.render
+        # image_settings = rd.image_settings
+        # file_format = image_settings.file_format
+
+        box = layout.box()
+        # box.label('Render VR Video')
+        col = box.column()
+        col.operator('mysetting.render', text='Rendering', icon='COLORSET_03_VEC')
+        col.separator()
+        col.prop(rd, "filepath", text="")
 ################################################################################
 # Logic:
 ################################################################################
@@ -452,6 +564,9 @@ def register():
     bpy.utils.register_module(__name__)
 
     bpy.types.Scene.my_settings = PointerProperty(type=MySettings)
+
+    # Construction
+    bpy.types.Scene.is_projection = bpy.props.BoolProperty(name='Projection')
 
     # Animation
     bpy.types.Scene.enum_brushes = EnumProperty(name='Brushes',

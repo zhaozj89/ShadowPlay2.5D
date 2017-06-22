@@ -358,7 +358,7 @@ class IMPORT_OT_image_to_grid(Operator, AddObjectHelper):
         from math import radians
 
         for plane in planes:
-            plane.location = Vector((0, 2.5, 2))
+            plane.location = context.scene.cursor_location
             plane.rotation_euler = (radians(90), 0, 0)
 
         context.scene.update()
