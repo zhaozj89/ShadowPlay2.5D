@@ -66,8 +66,7 @@ from sklearn.decomposition import PCA
 # Global
 ################################################################################
 
-class MySettings(PropertyGroup):
-    instance_nb = 6
+class MySettingsProperty(PropertyGroup):
     enum_mode = EnumProperty(name='Mode',
                              description='Different drawing mode',
                              items=[('IMPORT_MODE','Import',''),
@@ -75,26 +74,11 @@ class MySettings(PropertyGroup):
                                     ('ANIMATION_MODE','Animation','')],
                              default='IMPORT_MODE')
 
-class MySettingOperatorPlay(bpy.types.Operator):
-    bl_idname = 'mysetting.play'
-    bl_label = 'MySetting Play'
-    bl_options = {'UNDO'}
-
-    def invoke(self, context, event):
-        scene = context.scene
-        scene.frame_start = AnimationProperty.current_frame
-        scene.frame_end = AnimationProperty.current_frame+AnimationProperty.frame_block_nb-1
-
-        bpy.ops.screen.animation_play()
-        if context.screen.is_animation_playing==False:
-            scene.frame_current = AnimationProperty.current_frame
-
-        return {'FINISHED'}
 
 
-class MySettingOperatorReset(bpy.types.Operator):
-    bl_idname = 'mysetting.reset'
-    bl_label = 'MySetting Reset'
+class MySettingsOperatorReset(bpy.types.Operator):
+    bl_idname = 'mysettings.reset'
+    bl_label = 'MySettings Reset'
     bl_options = {'UNDO'}
 
     def invoke(self, context, event):
@@ -102,15 +86,15 @@ class MySettingOperatorReset(bpy.types.Operator):
         bpy.ops.wm.addon_refresh()
         return {'FINISHED'}
 
-class MySettingOperatorRender(bpy.types.Operator):
-    bl_idname = 'mysetting.render'
-    bl_label = 'MySetting Render'
+class MySettingsOperatorRender(bpy.types.Operator):
+    bl_idname = 'mysettings.render'
+    bl_label = 'MySettings Render'
     bl_options = {'UNDO'}
 
     def invoke(self, context, event):
         scene = context.scene
         scene.frame_start = 1
-        scene.frame_end = 20 #AnimationProperty.current_frame+AnimationProperty.frame_block_nb-1
+        scene.frame_end = AnimationProperty.current_frame+AnimationProperty.frame_block_nb-1
 
         bpy.ops.render.render(animation=True)
         return {'FINISHED'}
@@ -231,7 +215,7 @@ class CleanStrokes(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return (context.scene.grease_pencil != None) #and (context.scene.grease_pencil.layers.active.active_frame.strokes[-1]!=None)
+        return (context.scene.grease_pencil != None)
 
     def invoke(self, context, event):
         g = context.scene.grease_pencil
@@ -344,6 +328,22 @@ class AnimationOperatorUpdate(bpy.types.Operator):
 
         return {'FINISHED'}
 
+class AnimationOperatorPreview(bpy.types.Operator):
+    bl_idname = 'animation.preview'
+    bl_label = 'Animation Preview'
+    bl_options = {'UNDO'}
+
+    def invoke(self, context, event):
+        scene = context.scene
+        scene.frame_start = AnimationProperty.current_frame
+        scene.frame_end = AnimationProperty.current_frame+AnimationProperty.frame_block_nb-1
+
+        bpy.ops.screen.animation_play()
+        if context.screen.is_animation_playing==False:
+            scene.frame_current = AnimationProperty.current_frame
+
+        return {'FINISHED'}
+
 # Handler
 class AnimationBrushes:
     gp = None
@@ -376,7 +376,7 @@ def AnimationHandlerUpdateBrushes(self, context):
 # Recording
 ################################################################################
 
-class RecordingData:
+class RecordingProperty:
     start_frame = []
     end_frame = []
     camera_fcurve_x = None
@@ -394,14 +394,23 @@ class RecordingUIListItem(UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
         split = layout.split(0.3)
         split.prop(item, "name", text="", emboss=False, icon='CLIP')
-        split.label('Start: %d' % RecordingData.start_frame[index])
-        split.label('End: %d' % RecordingData.end_frame[index])
+        split.label('Start: %d' % RecordingProperty.start_frame[index])
+        split.label('End: %d' % RecordingProperty.end_frame[index])
 
 # Operator
+class RecordingOperatorListActionEdit(bpy.types.Operator):
+    bl_idname = 'recording.edit'
+    bl_label = 'List Action Edit'
+
+    def invoke(self, context, event):
+        index = context.scene.recording_index
+        context.scene.frame_current = index*AnimationProperty.frame_block_nb+1
+        return {'FINISHED'}
+
 # https://blender.stackexchange.com/questions/30444/create-an-interface-which-is-similar-to-the-material-list-box
-class RecordingOperatorListAction(bpy.types.Operator):
-    bl_idname = 'recording.list_action'
-    bl_label = 'List Action'
+class RecordingOperatorListActionAdd(bpy.types.Operator):
+    bl_idname = 'recording.add'
+    bl_label = 'List Action Add'
 
     def invoke(self, context, event):
         scene = context.scene
@@ -417,15 +426,15 @@ class RecordingOperatorListAction(bpy.types.Operator):
         if obj.animation_data==None:
             obj.animation_data_create()
             obj.animation_data.action = bpy.data.actions.new(name='LocationAnimation')
-            RecordingData.camera_fcurve_x = obj.animation_data.action.fcurves.new(data_path='location', index=0)
-            RecordingData.camera_fcurve_y = obj.animation_data.action.fcurves.new(data_path='location', index=1)
+            RecordingProperty.camera_fcurve_x = obj.animation_data.action.fcurves.new(data_path='location', index=0)
+            RecordingProperty.camera_fcurve_y = obj.animation_data.action.fcurves.new(data_path='location', index=1)
 
         position = obj.location
-        RecordingData.camera_fcurve_x.keyframe_points.insert(AnimationProperty.current_frame, position[0], {'FAST'})
-        RecordingData.camera_fcurve_y.keyframe_points.insert(AnimationProperty.current_frame, position[1], {'FAST'})
+        RecordingProperty.camera_fcurve_x.keyframe_points.insert(AnimationProperty.current_frame, position[0], {'FAST'})
+        RecordingProperty.camera_fcurve_y.keyframe_points.insert(AnimationProperty.current_frame, position[1], {'FAST'})
 
-        RecordingData.start_frame.append(AnimationProperty.current_frame)
-        RecordingData.end_frame.append(AnimationProperty.current_frame+AnimationProperty.frame_block_nb-1)
+        RecordingProperty.start_frame.append(AnimationProperty.current_frame)
+        RecordingProperty.end_frame.append(AnimationProperty.current_frame+AnimationProperty.frame_block_nb-1)
         AnimationProperty.current_frame+=AnimationProperty.frame_block_nb
 
         return {"FINISHED"}
@@ -433,17 +442,6 @@ class RecordingOperatorListAction(bpy.types.Operator):
 ################################################################################
 # Camera
 ################################################################################
-
-# Operator
-class CameraOperatorSetting(bpy.types.Operator):
-    bl_idname = 'camera.setting'
-    bl_label = 'Camera Setting'
-    bl_options = {'UNDO'}
-
-    def invoke(self, context, event):
-        context.scene.cursor_location.x = context.scene.objects['Camera'].location.x
-        context.scene.cursor_location.y = context.scene.objects['Camera'].location.y+2.5
-        return {'FINISHED'}
 
 # UI
 class CameraUIPanel(Panel):
@@ -464,6 +462,17 @@ class CameraUIPanel(Panel):
         box.prop(camera, 'location', text='FWD/BWD', index=1)
         box.separator()
         box.operator('camera.setting', text='Set', icon='RENDER_STILL')
+
+# Operator
+class CameraOperatorSetting(bpy.types.Operator):
+    bl_idname = 'camera.setting'
+    bl_label = 'Camera Setting'
+    bl_options = {'UNDO'}
+
+    def invoke(self, context, event):
+        context.scene.cursor_location.x = context.scene.objects['Camera'].location.x
+        context.scene.cursor_location.y = context.scene.objects['Camera'].location.y+2.5
+        return {'FINISHED'}
 
 ################################################################################
 # Main UI:
@@ -518,10 +527,10 @@ class MainUIPanel(Panel):
         row.operator('ed.undo', text='Undo', icon='BACK')
         row.operator('ed.redo', text='Redo', icon='FORWARD')
         if context.screen.is_animation_playing==True:
-            col.operator("mysetting.play", text="Pause", icon='PAUSE')
+            col.operator("animation.preview", text="Pause", icon='PAUSE')
         else:
-            col.operator('mysetting.play', text='Preview', icon='RIGHTARROW')
-        col.operator('mysetting.reset', text='Reset', icon='HAND')
+            col.operator('animation.preview', text='Preview', icon='RIGHTARROW')
+        col.operator('mysettings.reset', text='Reset', icon='HAND')
 
         for i in range(3):
             layout.split()
@@ -533,7 +542,9 @@ class MainUIPanel(Panel):
         col.template_list('RecordingUIListItem', '', scene, 'recording_array', scene, 'recording_index', rows=2)
 
         col = box.column()
-        col.operator('recording.list_action', icon='ZOOMIN', text='Add')
+        col.operator('recording.add', icon='ZOOMIN', text='Add')
+        col.separator()
+        col.operator('recording.edit', icon='SEQ_SEQUENCER', text='Edit')
 
 class RenderingUIPanel(Panel):
     bl_space_type = 'VIEW_3D'
@@ -545,17 +556,13 @@ class RenderingUIPanel(Panel):
 
     def draw(self, context):
         layout = self.layout
-        # scene = context.scene
-        rd = context.scene.render
-        # image_settings = rd.image_settings
-        # file_format = image_settings.file_format
 
         box = layout.box()
-        # box.label('Render VR Video')
         col = box.column()
-        col.operator('mysetting.render', text='Rendering', icon='COLORSET_03_VEC')
+        col.operator('mysettings.render', text='Rendering', icon='COLORSET_03_VEC')
         col.separator()
-        col.prop(rd, "filepath", text="")
+        col.prop(context.scene.render, "filepath", text="")
+
 ################################################################################
 # Logic:
 ################################################################################
@@ -563,7 +570,7 @@ class RenderingUIPanel(Panel):
 def register():
     bpy.utils.register_module(__name__)
 
-    bpy.types.Scene.my_settings = PointerProperty(type=MySettings)
+    bpy.types.Scene.my_settings = PointerProperty(type=MySettingsProperty)
 
     # Construction
     bpy.types.Scene.is_projection = bpy.props.BoolProperty(name='Projection')
@@ -573,7 +580,6 @@ def register():
                                                 description='Different Brushes',
                                                 items=[('', "", ""),
                                                        ('FOLLOWPATH','Follow Path',''),
-                                                       # ('ANCHOR', "Anchor", ""), ('RIGID', "Rigid", ""),
                                                        ('HPOINT','Handle Point','')],
                                                 default='',
                                                 update=AnimationHandlerUpdateBrushes)
