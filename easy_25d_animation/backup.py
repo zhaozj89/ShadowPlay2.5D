@@ -703,3 +703,17 @@
             #     column.operator('screen.animation_play', text='Play', icon='RIGHTARROW')
             # column.separator()
             # column.operator('animation.following_path', text='Following Path', icon='GREASEPENCIL')
+
+
+# # Property
+# class ConstructionProperty:
+#     instance_nb = 6
+
+
+# # Property
+# class AnimationProperty():
+#     current_frame = 1
+#     frame_block_nb = 100
+#     sampling_step = 2
+
+                                                # update=AnimationHandlerUpdateBrushes)

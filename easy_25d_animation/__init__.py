@@ -18,6 +18,7 @@
 
 # <pep8 compliant>
 
+
 bl_info = {
     "name": "Play2.5D",
     "author": "Zhenjie Zhao",
@@ -31,14 +32,15 @@ bl_info = {
 }
 
 
-if "bpy" in locals():
-    import importlib
-    importlib.reload(utils)
-    importlib.reload(ui_utils)
-    importlib.reload(ops_utils)
-    importlib.reload(mesh)
-else:
-    from . import utils, ui_utils, ops_utils, mesh
+# if "bpy" in locals():
+#     import importlib
+#     importlib.reload(utils)
+#     importlib.reload(ui_utils)
+#     importlib.reload(ops_utils)
+#     importlib.reload(mesh)
+#     importlib.reload(brushes)
+# else:
+#     from . import utils, ui_utils, ops_utils, mesh, brushes
 
 import os
 import sys
@@ -51,12 +53,8 @@ import bmesh
 from rna_prop_ui import PropertyPanel
 from bpy.app.handlers import persistent
 from bpy.types import (Panel, Operator, PropertyGroup, UIList, Menu)
-from bpy.props import (StringProperty,
-                       BoolProperty,
-                       IntProperty,
-                       FloatProperty,
-                       EnumProperty,
-                       PointerProperty)
+from bpy.props import (StringProperty, BoolProperty, IntProperty, FloatProperty, EnumProperty, PointerProperty)
+from bpy_extras.view3d_utils import region_2d_to_location_3d, region_2d_to_vector_3d
 
 # depends on sklean
 import numpy as np
@@ -80,7 +78,7 @@ class MySettingsProperty(PropertyGroup):
 class MySettingsOperatorReset(bpy.types.Operator):
     bl_idname = 'mysettings.reset'
     bl_label = 'MySettings Reset'
-    bl_options = {'UNDO'}
+    bl_options = {'REGISTER','UNDO'}
 
     def invoke(self, context, event):
         bpy.ops.wm.read_homefile()
@@ -90,12 +88,12 @@ class MySettingsOperatorReset(bpy.types.Operator):
 class MySettingsOperatorRender(bpy.types.Operator):
     bl_idname = 'mysettings.render'
     bl_label = 'MySettings Render'
-    bl_options = {'UNDO'}
+    bl_options = {'REGISTER','UNDO'}
 
     def invoke(self, context, event):
         scene = context.scene
         scene.frame_start = 1
-        scene.frame_end = AnimationProperty.current_frame+AnimationProperty.frame_block_nb-1
+        scene.frame_end = context.scene.current_frame+context.scene.frame_block_nb-1
 
         bpy.ops.render.render(animation=True)
         return {'FINISHED'}
@@ -103,10 +101,6 @@ class MySettingsOperatorRender(bpy.types.Operator):
 ################################################################################
 # Construction
 ################################################################################
-
-# Property
-class ConstructionProperty:
-    instance_nb = 6
 
 # Operator
 class ConstructionOperatorInstancing(bpy.types.Operator):
@@ -212,7 +206,7 @@ class ConstructionOperatorInstancing(bpy.types.Operator):
 class CleanStrokes(bpy.types.Operator):
     bl_idname = 'layout.cleanstrokes'
     bl_label = 'Cleaning strokes'
-    bl_options = {'UNDO'}
+    bl_options = {'REGISTER','UNDO'}
 
     @classmethod
     def poll(cls, context):
@@ -230,30 +224,154 @@ class CleanStrokes(bpy.types.Operator):
 # Animation
 ################################################################################
 
-# Property
-class AnimationProperty():
-    current_frame = 1
-    frame_block_nb = 100
-    sampling_step = 2
-
-# UI
-
 # Operator
-class AnimationOperatorUpdate(bpy.types.Operator):
-    bl_idname = 'animation.animation_update'
-    bl_label = 'Animation Update'
-    bl_options = {'UNDO'}
+class AnimationARAPOperator(bpy.types.Operator):
+    bl_idname = 'animation.animation_arap'
+    bl_label = 'Animation ARAP'
+    bl_options = {'REGISTER','UNDO'}
+
+    def __init__(self):
+        print("Start Invoke")
+        self.cp_before = []
+        self.cp_after = []
+        self.seleted_cp = [None]
+
+    def __del__(self):
+        print("End Invoke")
 
     @classmethod
     def poll(cls, context):
-        return (context.active_object!=None)
+        return (context.active_object!=None) and (context.scene.grease_pencil!=None)
+
+    def modal(self, context, event):
+        if event.type == 'LEFTMOUSE':
+            if event.value == 'PRESS':
+                x, y = event.mouse_region_x, event.mouse_region_y
+                loc = region_2d_to_location_3d(context.region, context.space_data.region_3d, (x, y), bpy.context.scene.cursor_location)
+                print('I am pressed')
+                if len(self.cp_before)<=0:
+                    return {'FINISHED'}
+                min_dist = sys.float_info.max
+                for co in self.cp_before:
+                    dist = LA.norm(np.array((loc-co)))
+                    if dist<=min_dist:
+                        self.seleted_cp[0] = co
+                    # print(co[0])
+                    # print(co[1])
+                    # print(co[2])
+
+
+                # print(x)
+                # print(y)
+                # print("******************")
+                # print(loc)
+                # print(loc[0])
+                # print(loc[1])
+                # print(loc[2])
+                # print("******************")
+                # print(event.mouse_x)
+                # print(event.mouse_y)
+
+                return {'RUNNING_MODAL'}
+            if event.value == 'RELEASE':
+                print('I am released')
+                return {'FINISHED'}
+        if event.type == 'MOUSEMOVE':
+            self.delta_x = event.mouse_region_x - self.curr_mouse_x
+            self.delta_y = event.mouse_region_y - self.curr_mouse_y
+
+            self.curr_mouse_x = event.mouse_region_x
+            self.curr_mouse_y = event.mouse_region_y
+
+            if self.seleted_cp[0]==None:
+                return {'RUNNING_MODAL'}
+
+            x, y = self.curr_mouse_x, self.curr_mouse_y
+            loc = region_2d_to_location_3d(context.region, context.space_data.region_3d, (x, y), bpy.context.scene.cursor_location)
+
+            self.seleted_cp[0][0] = loc[0]
+            self.seleted_cp[0][1] = loc[1]
+            self.seleted_cp[0][2] = loc[2]
+
+            return {'RUNNING_MODAL'}
+
+        return {'PASS_THROUGH'}
+
+    def invoke(self, context, event):
+        gp = context.scene.grease_pencil
+
+        self.curr_mouse_x = event.mouse_region_x
+        self.curr_mouse_y = event.mouse_region_y
+
+        obj = context.active_object
+        ly = gp.layers.active
+        if ly==None:
+            return {'FINISHED'}
+        af = ly.active_frame
+        if af==None:
+            return {'FINISHED'}
+        strokes = af.strokes
+
+        if (strokes==None) or (len(strokes)>10):
+            return {'FINISHED'}
+
+        cp_before = []
+        for stroke in strokes:
+            points = stroke.points
+            if len(points)==0:
+                continue
+            cp = [0,0,0]
+            for point in points:
+                cp[0] += point.co[0]
+                cp[1] += point.co[1]
+                cp[2] += point.co[2]
+            cp[0] /= len(points)
+            cp[1] /= len(points)
+            cp[2] /= len(points)
+
+            cp_before.append(cp)
+
+        for stroke in strokes:
+            strokes.remove(stroke)
+
+        for cp in cp_before:
+            stroke = af.strokes.new()
+            stroke.draw_mode = '3DSPACE'
+            stroke.points.add(count = 1)
+            stroke.points[0].co = cp
+            self.cp_before.append(stroke.points[0].co)
+
+        ly.line_change = 10
+
+        context.window_manager.modal_handler_add(self)
+        return {'RUNNING_MODAL'}
+
+class AnimationOperatorUpdate(bpy.types.Operator):
+    bl_idname = 'animation.animation_update'
+    bl_label = 'Animation Update'
+    bl_options = {'REGISTER','UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        return (context.active_object!=None) and (context.scene.grease_pencil!=None)
 
     def invoke(self, context, event):
         # import pdb; pdb.set_trace()
+        gp = context.scene.grease_pencil
 
         obj = context.active_object
+        ly = gp.layers.active
+        if ly==None:
+            return {'FINISHED'}
+        af = ly.active_frame
+        if af==None:
+            return {'FINISHED'}
+        strokes = af.strokes
+
+        if (strokes==None) or (len(strokes)>10):
+            return {'FINISHED'}
+
         if context.scene.enum_brushes=='FOLLOWPATH':
-            strokes = AnimationBrushes.brush_dict['FOLLOWPATH'].active_frame.strokes
             try:
                 stroke = strokes[-1]
             except IndexError:
@@ -268,11 +386,11 @@ class AnimationOperatorUpdate(bpy.types.Operator):
                 fcurve_z = obj.animation_data.action.fcurves.new(data_path='location', index=2)
 
                 i = 0
-                while int(i*AnimationProperty.sampling_step) < N:
-                    idx = int(i*AnimationProperty.sampling_step)
+                while int(i*2) < N:
+                    idx = int(i*2)
                     position = stroke.points[idx].co
-                    fcurve_x.keyframe_points.insert(AnimationProperty.current_frame+idx, position[0], {'FAST'})
-                    fcurve_z.keyframe_points.insert(AnimationProperty.current_frame+idx, position[2], {'FAST'})
+                    fcurve_x.keyframe_points.insert(context.scene.current_frame+idx, position[0], {'FAST'})
+                    fcurve_z.keyframe_points.insert(context.scene.current_frame+idx, position[2], {'FAST'})
                     i+=1
 
         elif context.scene.enum_brushes=='HPOINT':
@@ -283,97 +401,72 @@ class AnimationOperatorUpdate(bpy.types.Operator):
 
             # Point handler
             pca = PCA(n_components=2)
-            strokes = AnimationBrushes.brush_dict['HPOINT'].active_frame.strokes
-            stroke = strokes[-1]
 
-            phandler = stroke.points[0].co.xyz
-            ppath = [p.co.xz for p in stroke.points]
-            phandler = np.array(phandler)
-            ppath = np.array(ppath) # the size is correct, amazing
+            try:
+                stroke = strokes[-1]
+            except IndexError:
+                pass
+            else:
+                phandler = stroke.points[0].co.xyz
+                ppath = [p.co.xz for p in stroke.points]
+                phandler = np.array(phandler)
+                ppath = np.array(ppath) # the size is correct, amazing
 
-            #PCA
-            res = pca.fit(ppath).transform(ppath)
-            res[:,1] = 0.0
-            new_ppath = pca.inverse_transform(res)
-            new_phandler = phandler
+                #PCA
+                res = pca.fit(ppath).transform(ppath)
+                res[:,1] = 0.0
+                new_ppath = pca.inverse_transform(res)
+                new_phandler = phandler
 
-            # proportional based linear blend skinning
-            (nframe, ndim) = new_ppath.shape
-            delta_list = []
-            for i in range(1, nframe):
-                t0 = new_ppath[i, 0] - new_ppath[i-1, 0]
-                t1 = new_ppath[i, 1] - new_ppath[i-1, 1]
-                delta_list.append((t0, t1))
+                # proportional based linear blend skinning
+                (nframe, ndim) = new_ppath.shape
+                delta_list = []
+                for i in range(1, nframe):
+                    t0 = new_ppath[i, 0] - new_ppath[i-1, 0]
+                    t1 = new_ppath[i, 1] - new_ppath[i-1, 1]
+                    delta_list.append((t0, t1))
 
-            weight = {}
-            matrix_world = obj.matrix_world
-            for vert in mesh.vertices:
-                v_co_world = np.array(matrix_world*vert.co)
-                dist = LA.norm(v_co_world-new_phandler, 2)
-                weight[vert.index] = np.exp(-dist)
+                weight = {}
+                matrix_world = obj.matrix_world
+                for vert in mesh.vertices:
+                    v_co_world = np.array(matrix_world*vert.co)
+                    dist = LA.norm(v_co_world-new_phandler, 2)
+                    weight[vert.index] = np.exp(-dist)
 
-            normalized_delta_list = []
-            for i in range(AnimationProperty.frame_block_nb):
-                normalized_delta_list.append(delta_list[i%len(delta_list)])
+                normalized_delta_list = []
+                for i in range(context.scene.frame_block_nb):
+                    normalized_delta_list.append(delta_list[i%len(delta_list)])
 
-            frames = [AnimationProperty.current_frame+i for i in range(AnimationProperty.frame_block_nb)]
+                frames = [context.scene.current_frame+i for i in range(context.scene.frame_block_nb)]
 
-            for vert in mesh.vertices:
-                fcurve_x = action.fcurves.new('vertices[%d].co'%vert.index, index=0)
-                fcurve_y = action.fcurves.new('vertices[%d].co'%vert.index, index=1)
-                co_kf_x = vert.co[0]
-                co_kf_y = vert.co[1]
-                for frame, val in zip(frames, normalized_delta_list):
-                    co_kf_x += weight[vert.index]*val[0]
-                    co_kf_y += weight[vert.index]*val[1]
-                    fcurve_x.keyframe_points.insert(frame, co_kf_x, {'FAST'})
-                    fcurve_y.keyframe_points.insert(frame, co_kf_y, {'FAST'})
+                for vert in mesh.vertices:
+                    fcurve_x = action.fcurves.new('vertices[%d].co'%vert.index, index=0)
+                    fcurve_y = action.fcurves.new('vertices[%d].co'%vert.index, index=1)
+                    co_kf_x = vert.co[0]
+                    co_kf_y = vert.co[1]
+                    for frame, val in zip(frames, normalized_delta_list):
+                        co_kf_x += weight[vert.index]*val[0]
+                        co_kf_y += weight[vert.index]*val[1]
+                        fcurve_x.keyframe_points.insert(frame, co_kf_x, {'FAST'})
+                        fcurve_y.keyframe_points.insert(frame, co_kf_y, {'FAST'})
 
         return {'FINISHED'}
 
 class AnimationOperatorPreview(bpy.types.Operator):
     bl_idname = 'animation.preview'
     bl_label = 'Animation Preview'
-    bl_options = {'UNDO'}
+    bl_options = {'REGISTER','UNDO'}
 
     def invoke(self, context, event):
         scene = context.scene
-        scene.frame_start = AnimationProperty.current_frame
-        scene.frame_end = AnimationProperty.current_frame+AnimationProperty.frame_block_nb-1
+        scene.frame_start = context.scene.current_frame
+        scene.frame_end = context.scene.current_frame+context.scene.frame_block_nb-1
 
         bpy.ops.screen.animation_play()
         if context.screen.is_animation_playing==False:
-            scene.frame_current = AnimationProperty.current_frame
+            scene.frame_current = context.scene.current_frame
 
         return {'FINISHED'}
-
-# Handler
-class AnimationBrushes:
-    gp = None
-    brush_dict = {}
-
-def AnimationHandlerUpdateBrushes(self, context):
-    if AnimationBrushes.gp == None:
-        AnimationBrushes.gp = bpy.data.grease_pencil.new('AnimationPencil')
-
-    gp = AnimationBrushes.gp
-    context.scene.grease_pencil = gp
-
-    if 'FOLLOWPATH' not in AnimationBrushes.brush_dict:
-        layer = gp.layers.new('FOLLOWPATH')
-        layer.tint_color = (1.0, 0.0, 0.0)
-        layer.tint_factor = 1.0
-        AnimationBrushes.brush_dict['FOLLOWPATH'] = layer
-    if 'HPOINT' not in AnimationBrushes.brush_dict:
-        layer = gp.layers.new('HPOINT')
-        layer.tint_color = (0.5, 0.5, 0.5)
-        layer.tint_factor = 1.0
-        AnimationBrushes.brush_dict['HPOINT'] = layer
-
-    if context.scene.enum_brushes!=None:
-        gp.layers.active = AnimationBrushes.brush_dict[context.scene.enum_brushes]
-
-    return None
 
 ################################################################################
 # Recording
@@ -408,7 +501,7 @@ class RecordingOperatorListActionEdit(bpy.types.Operator):
 
     def invoke(self, context, event):
         index = context.scene.recording_index
-        context.scene.frame_current = index*AnimationProperty.frame_block_nb+1
+        context.scene.frame_current = index*context.scene.frame_block_nb+1
         return {'FINISHED'}
 
 # https://blender.stackexchange.com/questions/30444/create-an-interface-which-is-similar-to-the-material-list-box
@@ -437,12 +530,12 @@ class RecordingOperatorListActionAdd(bpy.types.Operator):
 
         RecordingProperty.camera_position_recording.append((position[0],position[1]))
 
-        RecordingProperty.camera_fcurve_x.keyframe_points.insert(AnimationProperty.current_frame, position[0], {'FAST'})
-        RecordingProperty.camera_fcurve_y.keyframe_points.insert(AnimationProperty.current_frame, position[1], {'FAST'})
+        RecordingProperty.camera_fcurve_x.keyframe_points.insert(context.scene.current_frame, position[0], {'FAST'})
+        RecordingProperty.camera_fcurve_y.keyframe_points.insert(context.scene.current_frame, position[1], {'FAST'})
 
-        RecordingProperty.start_frame.append(AnimationProperty.current_frame)
-        RecordingProperty.end_frame.append(AnimationProperty.current_frame+AnimationProperty.frame_block_nb-1)
-        AnimationProperty.current_frame+=AnimationProperty.frame_block_nb
+        RecordingProperty.start_frame.append(context.scene.current_frame)
+        RecordingProperty.end_frame.append(context.scene.current_frame+context.scene.frame_block_nb-1)
+        context.scene.current_frame+=context.scene.frame_block_nb
 
         return {"FINISHED"}
 
@@ -466,7 +559,6 @@ class OffScreenDraw(bpy.types.Operator):
         self._update_offscreen(context, self._offscreen)
         ncamera = len(RecordingProperty.camera_position_recording)
         camera_pos = RecordingProperty.camera_position_recording
-        print(camera_pos)
         self._opengl_draw(context, self._texture, aspect_ratio, 0.1, ncamera, camera_pos)
 
     @staticmethod
@@ -666,7 +758,7 @@ class CameraUIPanel(Panel):
 class CameraOperatorSetting(bpy.types.Operator):
     bl_idname = 'camera.setting'
     bl_label = 'Camera Setting'
-    bl_options = {'UNDO'}
+    bl_options = {'REGISTER','UNDO'}
 
     def invoke(self, context, event):
         context.scene.cursor_location.x = context.scene.objects['Camera'].location.x
@@ -712,7 +804,12 @@ class MainUIPanel(Panel):
             column = box.column()
             column.prop(context.scene, 'enum_brushes', text='Brushes')
             column.separator()
-            column.operator('animation.animation_update', text='Update', icon='ANIM')
+            if (scene.enum_brushes=='FOLLOWPATH') or (scene.enum_brushes=='HPOINT'):
+                column.operator('animation.animation_update', text='Update', icon='ANIM')
+            elif scene.enum_brushes=='ARAP':
+                row = column.row()
+                row.operator('gpencil.draw', text='Add CP', icon='EDIT').mode='DRAW'
+                row.operator('animation.animation_arap', text='Deform', icon='OUTLINER_DATA_MESH')
             column.separator()
             column.operator('layout.cleanstrokes', text='Clean Strokes', icon='MESH_CAPSULE')
 
@@ -801,9 +898,11 @@ def register():
                                                 description='Different Brushes',
                                                 items=[('','',''),
                                                        ('FOLLOWPATH','Path Following',''),
-                                                       ('HPOINT','Handle Point','')],
-                                                default='',
-                                                update=AnimationHandlerUpdateBrushes)
+                                                       ('HPOINT','Handle Point',''),
+                                                       ('ARAP','Rigid Deformation','')],
+                                                default='')
+    bpy.types.Scene.current_frame = bpy.props.IntProperty(name="current_frame", default=1)
+    bpy.types.Scene.frame_block_nb = bpy.props.IntProperty(name='frame_block_nb', default=100)
 
     # Recording
     bpy.types.Scene.recording_array = bpy.props.CollectionProperty(type=RecordingPropertyItem)
