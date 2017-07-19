@@ -45,6 +45,7 @@ import sys
 import math
 import mathutils
 import bpy
+from bgl import *
 import bpy.utils.previews
 import bmesh
 from rna_prop_ui import PropertyPanel
@@ -59,6 +60,7 @@ from bpy.props import (StringProperty,
 
 # depends on sklean
 import numpy as np
+import random
 from numpy import linalg as LA
 from sklearn.decomposition import PCA
 
@@ -69,12 +71,11 @@ from sklearn.decomposition import PCA
 class MySettingsProperty(PropertyGroup):
     enum_mode = EnumProperty(name='Mode',
                              description='Different drawing mode',
-                             items=[('IMPORT_MODE','Import',''),
+                             items=[('LIGHTING_MODE','Lighting',''),
+                                    ('IMPORT_MODE','Import',''),
                                     ('CONSTRUCTING_MODE','Construction',''),
                                     ('ANIMATION_MODE','Animation','')],
                              default='IMPORT_MODE')
-
-
 
 class MySettingsOperatorReset(bpy.types.Operator):
     bl_idname = 'mysettings.reset'
@@ -134,7 +135,7 @@ class ConstructionOperatorInstancing(bpy.types.Operator):
             for i in range(len(stroke.points)):
                 verts.append(points[i].co)
 
-            sampling_nb = min(ConstructionProperty.instance_nb, len(verts))
+            sampling_nb = min(context.scene.instance_nb, len(verts))
             sampling_step = len(verts)/sampling_nb
 
             shift = []
@@ -185,8 +186,8 @@ class ConstructionOperatorInstancing(bpy.types.Operator):
                         else:
                             x_cur = model_fcurve_x.keyframe_points[k].co[1]+x_pre2-x_pre
                             z_cur = model_fcurve_z.keyframe_points[k].co[1]+z_pre2-z_pre
-                        fcurve_x.keyframe_points.insert(frame_idx, x_cur, {'FAST'})
-                        fcurve_z.keyframe_points.insert(frame_idx, z_cur, {'FAST'})
+                        fcurve_x.keyframe_points.insert(frame_idx, x_cur+random.gauss(0, 0.05), {'FAST'})
+                        fcurve_z.keyframe_points.insert(frame_idx, z_cur+random.gauss(0, 0.05), {'FAST'})
 
                         x_pre = model_fcurve_x.keyframe_points[k].co[1]
                         z_pre = model_fcurve_z.keyframe_points[k].co[1]
@@ -220,7 +221,9 @@ class CleanStrokes(bpy.types.Operator):
     def invoke(self, context, event):
         g = context.scene.grease_pencil
         for l in g.layers:
-            g.layers.remove(l)
+            if l.active_frame!=None:
+                for s in l.active_frame.strokes:
+                    l.active_frame.strokes.remove(s)
         return {'FINISHED'}
 
 ################################################################################
@@ -377,6 +380,7 @@ def AnimationHandlerUpdateBrushes(self, context):
 ################################################################################
 
 class RecordingProperty:
+    camera_position_recording = [(0,0)]
     start_frame = []
     end_frame = []
     camera_fcurve_x = None
@@ -430,6 +434,9 @@ class RecordingOperatorListActionAdd(bpy.types.Operator):
             RecordingProperty.camera_fcurve_y = obj.animation_data.action.fcurves.new(data_path='location', index=1)
 
         position = obj.location
+
+        RecordingProperty.camera_position_recording.append((position[0],position[1]))
+
         RecordingProperty.camera_fcurve_x.keyframe_points.insert(AnimationProperty.current_frame, position[0], {'FAST'})
         RecordingProperty.camera_fcurve_y.keyframe_points.insert(AnimationProperty.current_frame, position[1], {'FAST'})
 
@@ -438,6 +445,198 @@ class RecordingOperatorListActionAdd(bpy.types.Operator):
         AnimationProperty.current_frame+=AnimationProperty.frame_block_nb
 
         return {"FINISHED"}
+
+################################################################################
+# OverView Drawing Using OpenGL
+# Modified from https://github.com/dfelinto/blender/blob/master/doc/python_api/examples/gpu.offscreen.1.py
+################################################################################
+
+class OffScreenDraw(bpy.types.Operator):
+    bl_idname = "view3d.offscreen_draw"
+    bl_label = "View3D Offscreen Draw"
+
+    _handle_calc = None
+    _handle_draw = None
+    is_enabled = False
+
+    # manage draw handler
+    @staticmethod
+    def draw_callback_px(self, context):
+        aspect_ratio = 1.0
+        self._update_offscreen(context, self._offscreen)
+        ncamera = len(RecordingProperty.camera_position_recording)
+        camera_pos = RecordingProperty.camera_position_recording
+        print(camera_pos)
+        self._opengl_draw(context, self._texture, aspect_ratio, 0.1, ncamera, camera_pos)
+
+    @staticmethod
+    def handle_add(self, context):
+        OffScreenDraw._handle_draw = bpy.types.SpaceView3D.draw_handler_add(
+                self.draw_callback_px, (self, context), 'WINDOW', 'POST_PIXEL')
+
+    @staticmethod
+    def handle_remove():
+        if OffScreenDraw._handle_draw is not None:
+            bpy.types.SpaceView3D.draw_handler_remove(OffScreenDraw._handle_draw, 'WINDOW')
+        OffScreenDraw._handle_draw = None
+
+    # off-screen buffer
+    @staticmethod
+    def _setup_offscreen(context):
+        import gpu
+        try:
+            offscreen = gpu.offscreen.new(512, 512)
+        except Exception as e:
+            print(e)
+            offscreen = None
+        return offscreen
+
+    @staticmethod
+    def _update_offscreen(context, offscreen):
+        scene = context.scene
+        render = scene.render
+        camera = scene.camera
+
+        modelview_matrix = camera.matrix_world.inverted()
+        projection_matrix = camera.calc_matrix_camera(
+                render.resolution_x,
+                render.resolution_y,
+                render.pixel_aspect_x,
+                render.pixel_aspect_y,
+                )
+
+        offscreen.draw_view3d(
+                scene,
+                context.space_data,
+                context.region,
+                projection_matrix,
+                modelview_matrix,
+                )
+
+    @staticmethod
+    def _opengl_draw(context, texture, aspect_ratio, scale, ncamera, camera_pos):
+        """
+        OpenGL code to draw a rectangle in the viewport
+        """
+
+        glDisable(GL_DEPTH_TEST)
+        glClearColor(1.0, 1.0, 1.0, 1.0);
+
+        # view setup
+        glMatrixMode(GL_PROJECTION)
+        glPushMatrix()
+        glLoadIdentity()
+
+        glMatrixMode(GL_MODELVIEW)
+        glPushMatrix()
+        glLoadIdentity()
+
+        glOrtho(-1, 1, -1, 1, -15, 15)
+        gluLookAt(0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0)
+
+        act_tex = Buffer(GL_INT, 1)
+        glGetIntegerv(GL_TEXTURE_2D, act_tex)
+
+        viewport = Buffer(GL_INT, 4)
+        glGetIntegerv(GL_VIEWPORT, viewport)
+
+        width = int(scale * viewport[2])
+        height = int(width / aspect_ratio)
+
+        glViewport(viewport[0], viewport[1], width, height)
+        glScissor(viewport[0], viewport[1], width, height)
+
+        # draw routine
+        glEnable(GL_TEXTURE_2D)
+        glActiveTexture(GL_TEXTURE0)
+
+        # glBindTexture(GL_TEXTURE_2D, texture)
+
+        # texco = [(1, 1), (0, 1), (0, 0), (1, 0)]
+        verco = [(1.0, 1.0), (-1.0, 1.0), (-1.0, -1.0), (1.0, -1.0)]
+
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
+
+        glColor4f(1.0, 1.0, 1.0, 1.0)
+
+        glBegin(GL_QUADS)
+        for i in range(4):
+            # glTexCoord3f(texco[i][0], texco[i][1], 0.0)
+            glVertex2f(verco[i][0], verco[i][1])
+        glEnd()
+
+        # back_step = 30
+        for i in range(ncamera):
+            glBegin(GL_TRIANGLES)
+            glColor3f(1.0, 0.5, 0.5)
+            glVertex3f(camera_pos[i][0]/40.0, camera_pos[i][1]/40.0, 0)
+            glVertex3f(camera_pos[i][0]/40.0-0.1, camera_pos[i][1]/40.0+0.1, 0)
+            glVertex3f(camera_pos[i][0]/40.0+0.1, camera_pos[i][1]/40.0+0.1, 0)
+            glEnd()
+
+        if ncamera>1:
+            for i in range(ncamera-1):
+                glBegin(GL_LINES);
+                glColor3f(0.6, 0.5, 0.5);
+                glLineWidth(0.2);
+                glVertex2f(camera_pos[i][0]/40.0, camera_pos[i][1]/40.0);
+                glVertex2f(camera_pos[i+1][0]/40.0, camera_pos[i+1][1]/40.0);
+                glEnd();
+
+
+        # restoring settings
+        # glBindTexture(GL_TEXTURE_2D, act_tex[0])
+
+        glDisable(GL_TEXTURE_2D)
+
+        # reset view
+        glMatrixMode(GL_PROJECTION)
+        glPopMatrix()
+
+        glMatrixMode(GL_MODELVIEW)
+        glPopMatrix()
+
+        glViewport(viewport[0], viewport[1], viewport[2], viewport[3])
+        glScissor(viewport[0], viewport[1], viewport[2], viewport[3])
+
+    # operator functions
+    @classmethod
+    def poll(cls, context):
+        return context.area.type == 'VIEW_3D'
+
+    def modal(self, context, event):
+        if context.area:
+            context.area.tag_redraw()
+
+        return {'PASS_THROUGH'}
+
+    def invoke(self, context, event):
+        if OffScreenDraw.is_enabled:
+            self.cancel(context)
+            return {'FINISHED'}
+        else:
+            self._offscreen = OffScreenDraw._setup_offscreen(context)
+            if self._offscreen:
+                self._texture = self._offscreen.color_texture
+            else:
+                self.report({'ERROR'}, "Error initializing offscreen buffer. More details in the console")
+                return {'CANCELLED'}
+
+            OffScreenDraw.handle_add(self, context)
+            OffScreenDraw.is_enabled = True
+
+            if context.area:
+                context.area.tag_redraw()
+
+            context.window_manager.modal_handler_add(self)
+            return {'RUNNING_MODAL'}
+
+    def cancel(self, context):
+        OffScreenDraw.handle_remove()
+        OffScreenDraw.is_enabled = False
+
+        if context.area:
+            context.area.tag_redraw()
 
 ################################################################################
 # Camera
@@ -501,7 +700,10 @@ class MainUIPanel(Panel):
 
         elif my_settings.enum_mode == 'CONSTRUCTING_MODE':
             column = box.column()
-            column.prop(context.scene, 'is_projection')
+            row = column.row(align=True)
+            row.prop(context.scene, 'is_projection')
+            row.prop(context.scene, 'add_noise')
+            column.prop(context.scene, 'instance_nb')
             column.operator('construction.instancing', text='Instancing', icon='BOIDS')
             column.separator()
             column.operator('layout.cleanstrokes', text='Clean Strokes', icon='MESH_CAPSULE')
@@ -514,6 +716,19 @@ class MainUIPanel(Panel):
             column.separator()
             column.operator('layout.cleanstrokes', text='Clean Strokes', icon='MESH_CAPSULE')
 
+        elif my_settings.enum_mode == 'LIGHTING_MODE':
+            view = context.space_data
+            world = context.scene.world
+            row = box.row()
+            row.prop(view, "show_floor", text="Show Floor")
+            row.prop(view, 'show_world', text='Show World')
+            row = box.row()
+            row.prop(world, 'use_sky_paper', text='Skey Color')
+            row.prop(world, 'use_sky_blend', text='Ground Color')
+            row = box.row()
+            row.column().prop(world, "horizon_color", text="Ground Color")
+            row.column().prop(world, "zenith_color", text='Sky Color')
+
         for i in range(3):
             layout.split()
 
@@ -524,13 +739,17 @@ class MainUIPanel(Panel):
         row.operator('gpencil.draw', text='Draw', icon='BRUSH_DATA').mode='DRAW'
         row.operator('transform.resize', text='Scale', icon='VIEWZOOM')
         row=col.row(align=True)
+        row.operator('object.delete', text='Delete', icon='X')
+        row.operator('mysettings.reset', text='Reset', icon='HAND')
+        row=col.row(align=True)
         row.operator('ed.undo', text='Undo', icon='BACK')
         row.operator('ed.redo', text='Redo', icon='FORWARD')
         if context.screen.is_animation_playing==True:
             col.operator("animation.preview", text="Pause", icon='PAUSE')
         else:
             col.operator('animation.preview', text='Preview', icon='RIGHTARROW')
-        col.operator('mysettings.reset', text='Reset', icon='HAND')
+        col.operator('view3d.offscreen_draw', text='Show OverView', icon='MESH_UVSPHERE')
+
 
         for i in range(3):
             layout.split()
@@ -573,13 +792,15 @@ def register():
     bpy.types.Scene.my_settings = PointerProperty(type=MySettingsProperty)
 
     # Construction
+    bpy.types.Scene.add_noise = bpy.props.BoolProperty(name='Add Noise', default=False)
     bpy.types.Scene.is_projection = bpy.props.BoolProperty(name='Projection')
+    bpy.types.Scene.instance_nb = bpy.props.IntProperty(name='#', default=6)
 
     # Animation
     bpy.types.Scene.enum_brushes = EnumProperty(name='Brushes',
                                                 description='Different Brushes',
-                                                items=[('', "", ""),
-                                                       ('FOLLOWPATH','Follow Path',''),
+                                                items=[('','',''),
+                                                       ('FOLLOWPATH','Path Following',''),
                                                        ('HPOINT','Handle Point','')],
                                                 default='',
                                                 update=AnimationHandlerUpdateBrushes)
