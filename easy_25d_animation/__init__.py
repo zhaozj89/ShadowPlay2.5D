@@ -59,6 +59,7 @@ from bpy_extras.view3d_utils import region_2d_to_location_3d, region_2d_to_vecto
 # depends on sklean
 import numpy as np
 import random
+import copy
 from numpy import linalg as LA
 from sklearn.decomposition import PCA
 
@@ -106,7 +107,7 @@ class MySettingsOperatorRender(bpy.types.Operator):
 class ConstructionOperatorInstancing(bpy.types.Operator):
     bl_idname = "construction.instancing"
     bl_label = "Instancing based on strokes"
-    bl_options = {"UNDO"}
+    bl_options = {'REGISTER', 'UNDO'}
 
     small_depth = 0
 
@@ -117,7 +118,15 @@ class ConstructionOperatorInstancing(bpy.types.Operator):
     def invoke(self, context, event):
         # import pdb; pdb.set_trace()
         gp = context.scene.grease_pencil
-        strokes = gp.layers.active.active_frame.strokes
+
+        obj = context.active_object
+        ly = gp.layers.active
+        if ly==None:
+            return {'FINISHED'}
+        af = ly.active_frame
+        if af==None:
+            return {'FINISHED'}
+        strokes = af.strokes
 
         try:
             stroke = strokes[-1]
@@ -203,7 +212,7 @@ class ConstructionOperatorInstancing(bpy.types.Operator):
             bpy.ops.object.select_all(action='DESELECT')
         return {'FINISHED'}
 
-class CleanStrokes(bpy.types.Operator):
+class ConstructionOperatorCleanStrokes(bpy.types.Operator):
     bl_idname = 'layout.cleanstrokes'
     bl_label = 'Cleaning strokes'
     bl_options = {'REGISTER','UNDO'}
@@ -225,7 +234,7 @@ class CleanStrokes(bpy.types.Operator):
 ################################################################################
 
 # Operator
-class AnimationARAPOperator(bpy.types.Operator):
+class AnimationOperatorARAP(bpy.types.Operator):
     bl_idname = 'animation.animation_arap'
     bl_label = 'Animation ARAP'
     bl_options = {'REGISTER','UNDO'}
@@ -235,6 +244,7 @@ class AnimationARAPOperator(bpy.types.Operator):
         self.cp_before = []
         self.cp_after = []
         self.seleted_cp = [None]
+        self.leftmouse_pressed = False
 
     def __del__(self):
         print("End Invoke")
@@ -248,51 +258,70 @@ class AnimationARAPOperator(bpy.types.Operator):
             if event.value == 'PRESS':
                 x, y = event.mouse_region_x, event.mouse_region_y
                 loc = region_2d_to_location_3d(context.region, context.space_data.region_3d, (x, y), bpy.context.scene.cursor_location)
-                print('I am pressed')
-                if len(self.cp_before)<=0:
+                if len(self.cp_after)<=0:
                     return {'FINISHED'}
                 min_dist = sys.float_info.max
-                for co in self.cp_before:
-                    dist = LA.norm(np.array((loc-co)))
+
+                matrix_object = self.obj.matrix_world.inverted()
+                loc_obj = np.array(matrix_object * loc)
+
+                for co in self.cp_after:
+                    cp_obj = np.array(matrix_object * co)
+                    dist = LA.norm(np.array((loc_obj[0:2]-cp_obj[0:2])), 2)
                     if dist<=min_dist:
                         self.seleted_cp[0] = co
-                    # print(co[0])
-                    # print(co[1])
-                    # print(co[2])
+                        min_dist = dist
 
-
-                # print(x)
-                # print(y)
-                # print("******************")
-                # print(loc)
-                # print(loc[0])
-                # print(loc[1])
-                # print(loc[2])
-                # print("******************")
-                # print(event.mouse_x)
-                # print(event.mouse_y)
-
+                if min_dist<0.05:
+                    self.leftmouse_pressed = True
                 return {'RUNNING_MODAL'}
             if event.value == 'RELEASE':
-                print('I am released')
                 return {'FINISHED'}
-        if event.type == 'MOUSEMOVE':
-            self.delta_x = event.mouse_region_x - self.curr_mouse_x
-            self.delta_y = event.mouse_region_y - self.curr_mouse_y
-
-            self.curr_mouse_x = event.mouse_region_x
-            self.curr_mouse_y = event.mouse_region_y
-
+        if (event.type == 'MOUSEMOVE') and (self.leftmouse_pressed==True):
             if self.seleted_cp[0]==None:
                 return {'RUNNING_MODAL'}
 
-            x, y = self.curr_mouse_x, self.curr_mouse_y
+            x, y = event.mouse_region_x, event.mouse_region_y
             loc = region_2d_to_location_3d(context.region, context.space_data.region_3d, (x, y), bpy.context.scene.cursor_location)
 
             self.seleted_cp[0][0] = loc[0]
             self.seleted_cp[0][1] = loc[1]
             self.seleted_cp[0][2] = loc[2]
 
+            # Image Deformation Using Moving Least Squares
+            ncp = len(self.cp_before)
+            assert(ncp==len(self.cp_after))
+            matrix_object = self.obj.matrix_world.inverted()
+
+            # compute q
+            q = []
+            for i in range(ncp):
+                cp_obj = matrix_object * self.cp_after[i]
+                q.append(np.array(cp_obj[0:2]))
+
+            # compute q_star
+            q_star = {}
+            for vert in self.mesh.vertices:
+                idx = vert.index
+                numerator = np.zeros(2)
+                w_sum = 0
+                for i in range(ncp):
+                    numerator += (self.weight_list[i][idx]*q[i])
+                    w_sum += self.weight_list[i][idx]
+                q_star[idx] = numerator / w_sum
+
+            # compute new positions
+            for vert in self.mesh.vertices:
+                idx = vert.index
+                f_hat = np.zeros(2)
+                for i in range(ncp):
+                    q_hat = q[i] - q_star[idx]
+                    f_hat += np.dot(q_hat, self.A_list[i][idx])
+                f_hat /= self.mu[idx]
+                f_hat = f_hat/LA.norm(f_hat, 2)
+                vco_new = self.res_length[idx]*f_hat + q_star[idx]
+                self.mesh.vertices[idx].co[0] = vco_new[0]
+                self.mesh.vertices[idx].co[1] = vco_new[1]
             return {'RUNNING_MODAL'}
 
         return {'PASS_THROUGH'}
@@ -300,10 +329,8 @@ class AnimationARAPOperator(bpy.types.Operator):
     def invoke(self, context, event):
         gp = context.scene.grease_pencil
 
-        self.curr_mouse_x = event.mouse_region_x
-        self.curr_mouse_y = event.mouse_region_y
-
-        obj = context.active_object
+        if gp.layers==None:
+            return {'FINISHED'}
         ly = gp.layers.active
         if ly==None:
             return {'FINISHED'}
@@ -312,10 +339,10 @@ class AnimationARAPOperator(bpy.types.Operator):
             return {'FINISHED'}
         strokes = af.strokes
 
-        if (strokes==None) or (len(strokes)>10):
+        if (strokes==None):
             return {'FINISHED'}
 
-        cp_before = []
+        cp_after = []
         for stroke in strokes:
             points = stroke.points
             if len(points)==0:
@@ -329,19 +356,105 @@ class AnimationARAPOperator(bpy.types.Operator):
             cp[1] /= len(points)
             cp[2] /= len(points)
 
-            cp_before.append(cp)
+            cp_after.append(cp)
 
         for stroke in strokes:
             strokes.remove(stroke)
 
-        for cp in cp_before:
-            stroke = af.strokes.new()
+        if gp.palettes:
+            gp_palette = gp.palettes.active
+        else:
+            gp_palette = gp.palettes.new('mypalette')
+
+        if 'black' in gp_palette.colors:
+            black_col = gp_palette.colors['black']
+        else:
+            black_col = gp_palette.colors.new()
+            black_col.name = 'black'
+            black_col.color = (0.0,0.0,0.0)
+
+        for cp in cp_after:
+            stroke = af.strokes.new(colorname=black_col.name)
             stroke.draw_mode = '3DSPACE'
+            stroke.line_width = 10
             stroke.points.add(count = 1)
             stroke.points[0].co = cp
-            self.cp_before.append(stroke.points[0].co)
+            self.cp_after.append(stroke.points[0].co)
 
-        ly.line_change = 10
+        self.cp_before = copy.deepcopy(self.cp_after)
+
+        self.obj = context.active_object
+        self.mesh = self.obj.data
+
+        # Image Deformation Using Moving Least Squares
+        self.p = []
+
+        ncp = len(self.cp_before)
+        assert(ncp==len(self.cp_after))
+        matrix_object = self.obj.matrix_world.inverted()
+
+        for i in range(ncp):
+            cp_obj = matrix_object * self.cp_before[i]
+            self.p.append(np.array(cp_obj[0:2]))
+
+        self.weight_list = []
+        for i in range(ncp):
+            weight = {}
+            for vert in self.mesh.vertices:
+                idx = vert.index
+                dist = LA.norm(self.p[i]-np.array(vert.co[0:2]), 2)
+                weight[idx] = 1/(dist*dist+1e-18)
+                weight[idx] = min(weight[idx], 9999.0)
+            self.weight_list.append(weight)
+
+        # pre-computing p_star
+        self.p_star = {}
+        self.res_length = {}
+        for vert in self.mesh.vertices:
+            idx = vert.index
+            numerator = np.zeros(2)
+            w_sum = 0
+            for i in range(ncp):
+                numerator += (self.weight_list[i][idx]*self.p[i])
+                w_sum += self.weight_list[i][idx]
+            self.p_star[idx] = numerator / w_sum
+            self.res_length[idx] = LA.norm(np.array(vert.co[0:2]) - self.p_star[idx], 2)
+
+        # pre-compute mu
+        self.mu = {}
+        for vert in self.mesh.vertices:
+            idx = vert.index
+            mu = 0.0
+            for i in range(ncp):
+                p_hat = self.p[i] - self.p_star[idx]
+                mu = mu+(self.weight_list[i][idx]*np.dot(p_hat, p_hat))
+            self.mu[idx] = mu
+
+        # pre-computing A
+        self.A_list = []
+        for i in range(ncp):
+            A = {}
+            for vert in self.mesh.vertices:
+                idx = vert.index
+                vo = np.array(vert.co[0:2])
+                p_hat = self.p[i] - self.p_star[idx]
+                v_pstar = vo - self.p_star[idx]
+
+                m_left = np.zeros((2,2))
+                m_left[0,0] = p_hat[0]
+                m_left[0,1] = p_hat[1]
+                m_left[1,0] = p_hat[1]
+                m_left[1,1] = -p_hat[0]
+
+                m_right = np.zeros((2,2))
+                m_right[0,0] = v_pstar[0]
+                m_right[0,1] = v_pstar[1]
+                m_right[1,0] = v_pstar[1]
+                m_right[1,1] = -v_pstar[0]
+
+                A[idx] = np.dot(m_left,m_right.transpose())
+                A[idx] = self.weight_list[i][idx]*A[idx]
+            self.A_list.append(A)
 
         context.window_manager.modal_handler_add(self)
         return {'RUNNING_MODAL'}
@@ -472,13 +585,6 @@ class AnimationOperatorPreview(bpy.types.Operator):
 # Recording
 ################################################################################
 
-class RecordingProperty:
-    camera_position_recording = [(0,0)]
-    start_frame = []
-    end_frame = []
-    camera_fcurve_x = None
-    camera_fcurve_y = None
-
 # Property
 class RecordingPropertyItem(bpy.types.PropertyGroup):
     name = bpy.props.StringProperty(name='Name', default='')
@@ -486,13 +592,17 @@ class RecordingPropertyItem(bpy.types.PropertyGroup):
     start_frame = bpy.props.IntProperty(name='Startframe', default=0)
     end_frame = bpy.props.IntProperty(name='Endframe', default=0)
 
+    camera_position0 = bpy.props.FloatProperty(name='camera_position0', default=0.0)
+    camera_position1 = bpy.props.FloatProperty(name='camera_position1', default=0.0)
+    camera_rotation_euler = bpy.props.FloatProperty(name='camera_rotation_euler', default=0.0)
+
 # UI
 class RecordingUIListItem(UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
         split = layout.split(0.3)
         split.prop(item, "name", text="", emboss=False, icon='CLIP')
-        split.label('Start: %d' % RecordingProperty.start_frame[index])
-        split.label('End: %d' % RecordingProperty.end_frame[index])
+        split.label('Start: %d' % item.start_frame)
+        split.label('End: %d' % item.end_frame)
 
 # Operator
 class RecordingOperatorListActionEdit(bpy.types.Operator):
@@ -523,18 +633,22 @@ class RecordingOperatorListActionAdd(bpy.types.Operator):
         if obj.animation_data==None:
             obj.animation_data_create()
             obj.animation_data.action = bpy.data.actions.new(name='LocationAnimation')
-            RecordingProperty.camera_fcurve_x = obj.animation_data.action.fcurves.new(data_path='location', index=0)
-            RecordingProperty.camera_fcurve_y = obj.animation_data.action.fcurves.new(data_path='location', index=1)
+            camera_fcurve_x = obj.animation_data.action.fcurves.new(data_path='location', index=0)
+            camera_fcurve_y = obj.animation_data.action.fcurves.new(data_path='location', index=1)
+        else:
+            camera_fcurve_x = obj.animation_data.action.fcurves[0]
+            camera_fcurve_y = obj.animation_data.action.fcurves[1]
 
         position = obj.location
+        item.camera_position0 = position[0]
+        item.camera_position1 = position[1]
+        item.camera_rotation_euler = obj.rotation_euler[2]
 
-        RecordingProperty.camera_position_recording.append((position[0],position[1]))
+        camera_fcurve_x.keyframe_points.insert(context.scene.current_frame, position[0], {'FAST'})
+        camera_fcurve_y.keyframe_points.insert(context.scene.current_frame, position[1], {'FAST'})
 
-        RecordingProperty.camera_fcurve_x.keyframe_points.insert(context.scene.current_frame, position[0], {'FAST'})
-        RecordingProperty.camera_fcurve_y.keyframe_points.insert(context.scene.current_frame, position[1], {'FAST'})
-
-        RecordingProperty.start_frame.append(context.scene.current_frame)
-        RecordingProperty.end_frame.append(context.scene.current_frame+context.scene.frame_block_nb-1)
+        item.start_frame = context.scene.current_frame
+        item.end_frame = context.scene.current_frame+context.scene.frame_block_nb-1
         context.scene.current_frame+=context.scene.frame_block_nb
 
         return {"FINISHED"}
@@ -557,8 +671,10 @@ class OffScreenDraw(bpy.types.Operator):
     def draw_callback_px(self, context):
         aspect_ratio = 1.0
         self._update_offscreen(context, self._offscreen)
-        ncamera = len(RecordingProperty.camera_position_recording)
-        camera_pos = RecordingProperty.camera_position_recording
+        ncamera = len(context.scene.recording_array)
+        camera_pos = []
+        for i in range(ncamera):
+            camera_pos.append((context.scene.recording_array[i].camera_position0,context.scene.recording_array[i].camera_position1))
         self._opengl_draw(context, self._texture, aspect_ratio, 0.1, ncamera, camera_pos)
 
     @staticmethod
@@ -912,6 +1028,16 @@ def unregister():
     bpy.utils.unregister_module(__name__)
 
     del bpy.types.Scene.my_settings
+
+    # Construction
+    del bpy.types.Scene.add_noise
+    del bpy.types.Scene.is_projection
+    del bpy.types.Scene.instance_nb
+
+    # Animation
+    del bpy.types.Scene.enum_brushes
+    del bpy.types.Scene.current_frame
+    del bpy.types.Scene.frame_block_nb
 
     # Recording
     del bpy.types.Scene.recording_array

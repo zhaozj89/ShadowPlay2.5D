@@ -717,3 +717,36 @@
 #     sampling_step = 2
 
                                                 # update=AnimationHandlerUpdateBrushes)
+
+
+
+
+
+
+
+
+
+        # self.testA_list = []
+        # for i in range(ncp):
+        #     A = {}
+        #     for vert in self.mesh.vertices:
+        #         first = np.array(vert.co[0:2])-self.p_star[vert.index]
+        #         third = self.p[i]-self.p_star[vert.index]
+        #         second = np.zeros((2,2))
+        #         for k in range(ncp):
+        #             a=np.reshape(self.p[k]-self.p_star[vert.index], (1,2))
+        #             b=np.reshape(self.p[k]-self.p_star[vert.index], (2,1))
+        #             second += self.weight_list[k][vert.index]*np.dot(b,a)
+        #         tmp = np.dot(first, LA.inv(second))
+        #         A[vert.index] = np.dot(tmp, third)
+        #     self.testA_list.append(A)
+
+
+
+
+                        # count = np.zeros(2)
+                        # for i in range(ncp):
+                        #     q_hat = q[i] - q_star[vert.index]
+                        #     count += self.testA_list[i][vert.index]*q_hat
+                        # vco_new = count + q_star[vert.index]
+                        # print(vco_new)
