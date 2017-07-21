@@ -32,14 +32,16 @@ bl_info = {
 }
 
 
-# if "bpy" in locals():
-#     import importlib
+if "bpy" in locals():
+    import importlib
+    importlib.reload(opengl_utils)
 #     importlib.reload(utils)
 #     importlib.reload(ui_utils)
 #     importlib.reload(ops_utils)
 #     importlib.reload(mesh)
 #     importlib.reload(brushes)
-# else:
+else:
+    from . import opengl_utils
 #     from . import utils, ui_utils, ops_utils, mesh, brushes
 
 import os
@@ -104,6 +106,112 @@ class MySettingsOperatorRender(bpy.types.Operator):
 ################################################################################
 
 # Operator
+class ConstructionOperatorInterpreteContour(bpy.types.Operator):
+    bl_idname = "construction.interpret_contour"
+    bl_label = "Interprete contour stroke"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        return (context.scene.grease_pencil!=None)
+
+    def invoke(self, context, event):
+        gp = context.scene.grease_pencil
+
+        obj = context.active_object
+        ly = gp.layers.active
+        if ly==None:
+            return {'FINISHED'}
+        af = ly.active_frame
+        if af==None:
+            return {'FINISHED'}
+        strokes = af.strokes
+        if (strokes==None) or (len(strokes)<1):
+            return {'FINISHED'}
+
+        contour_stroke = strokes[-1]
+
+        camera = context.scene.camera
+        if camera==None:
+            return {'FINISHED'}
+
+        render = context.scene.render
+        modelview_matrix = camera.matrix_world.inverted()
+        projection_matrix = camera.calc_matrix_camera(render.resolution_x,render.resolution_y,render.pixel_aspect_x,render.pixel_aspect_y)
+
+        M = projection_matrix*modelview_matrix
+
+        points_image = []
+        np_M = np.array(M)
+        for point in contour_stroke.points:
+            co = list(point.co)
+            co.append(1.0)
+            co = np.array(co)
+            res = np.dot(np_M, co)
+            res /= res[3]
+            points_image.append(res)
+
+        if gp.palettes:
+            gp_palette = gp.palettes.active
+        else:
+            gp_palette = gp.palettes.new('mypalette')
+
+        if 'black' in gp_palette.colors:
+            black_col = gp_palette.colors['black']
+        else:
+            black_col = gp_palette.colors.new()
+            black_col.name = 'black'
+            black_col.color = (0.0,0.0,0.0)
+
+        strokes.remove(contour_stroke)
+        stroke = af.strokes.new(colorname=black_col.name)
+        stroke.draw_mode = '3DSPACE'
+        stroke.line_width = 6
+        stroke.points.add(count = len(points_image))
+
+        M.invert()
+        np_M = np.array(M)
+        for i, point in enumerate(points_image):
+            first = np.dot(np_M[:,0:2], point[0:2]) + np_M[:,3]
+            second = np_M[:,2]
+            d = -first[2]/second[2]
+            res = first + d*second
+            res /= res[3]
+            stroke.points[i].co = res[0:3]
+
+        context.scene.have_contour = True
+        return {'FINISHED'}
+
+class ConstructionOperatorCurveInstancing(bpy.types.Operator):
+    bl_idname = "construction.curve_instancing"
+    bl_label = "Instancing based on curve (MUST have the contour first)"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        return (context.scene.grease_pencil!=None) and (context.scene.active_object!=None) and (context.scene.have_contour==True)
+
+    def invoke(self, context, event):
+        gp = context.scene.grease_pencil
+
+        obj = context.active_object
+        ly = gp.layers.active
+        if ly==None:
+            return {'FINISHED'}
+        af = ly.active_frame
+        if af==None:
+            return {'FINISHED'}
+        strokes = af.strokes
+        if (strokes==None) or (len(strokes)<2):
+            return {'FINISHED'}
+
+        contour_stroke = strokes[-2]
+        path_stroke = strokes[-1]
+
+
+
+        return {'FINISHED'}
+
 class ConstructionOperatorInstancing(bpy.types.Operator):
     bl_idname = "construction.instancing"
     bl_label = "Instancing based on strokes"
@@ -117,6 +225,11 @@ class ConstructionOperatorInstancing(bpy.types.Operator):
 
     def invoke(self, context, event):
         # import pdb; pdb.set_trace()
+        if context.scene.construction_mode=="PROJECTION":
+            context.scene.is_projection=True
+        else:
+            context.scene.is_projection=False
+
         gp = context.scene.grease_pencil
 
         obj = context.active_object
@@ -204,7 +317,6 @@ class ConstructionOperatorInstancing(bpy.types.Operator):
                     else:
                         new_obj.location[0] = shift[i][0]
                         new_obj.location[2] = shift[i][2]
-
 
                 context.scene.objects.link(new_obj)
                 ConstructionOperatorInstancing.small_depth += 0.001 # prevent z shadowing
@@ -673,9 +785,14 @@ class OffScreenDraw(bpy.types.Operator):
         self._update_offscreen(context, self._offscreen)
         ncamera = len(context.scene.recording_array)
         camera_pos = []
+        objects_pos = []
         for i in range(ncamera):
             camera_pos.append((context.scene.recording_array[i].camera_position0,context.scene.recording_array[i].camera_position1))
-        self._opengl_draw(context, self._texture, aspect_ratio, 0.1, ncamera, camera_pos)
+
+        for obj in bpy.data.objects:
+            objects_pos.append((obj.location[0], obj.location[1]))
+
+        self._opengl_draw(context, self._texture, aspect_ratio, 0.1, ncamera, camera_pos, objects_pos)
 
     @staticmethod
     def handle_add(self, context):
@@ -722,7 +839,7 @@ class OffScreenDraw(bpy.types.Operator):
                 )
 
     @staticmethod
-    def _opengl_draw(context, texture, aspect_ratio, scale, ncamera, camera_pos):
+    def _opengl_draw(context, texture, aspect_ratio, scale, ncamera, camera_pos, objects_pos):
         """
         OpenGL code to draw a rectangle in the viewport
         """
@@ -773,13 +890,12 @@ class OffScreenDraw(bpy.types.Operator):
             glVertex2f(verco[i][0], verco[i][1])
         glEnd()
 
-        # back_step = 30
         for i in range(ncamera):
             glBegin(GL_TRIANGLES)
             glColor3f(1.0, 0.5, 0.5)
-            glVertex3f(camera_pos[i][0]/40.0, camera_pos[i][1]/40.0, 0)
-            glVertex3f(camera_pos[i][0]/40.0-0.1, camera_pos[i][1]/40.0+0.1, 0)
-            glVertex3f(camera_pos[i][0]/40.0+0.1, camera_pos[i][1]/40.0+0.1, 0)
+            glVertex3f(camera_pos[i][0]/20.0, camera_pos[i][1]/20.0, 0)
+            glVertex3f(camera_pos[i][0]/20.0-0.1, camera_pos[i][1]/20.0+0.1, 0)
+            glVertex3f(camera_pos[i][0]/20.0+0.1, camera_pos[i][1]/20.0+0.1, 0)
             glEnd()
 
         if ncamera>1:
@@ -787,10 +903,13 @@ class OffScreenDraw(bpy.types.Operator):
                 glBegin(GL_LINES);
                 glColor3f(0.6, 0.5, 0.5);
                 glLineWidth(0.2);
-                glVertex2f(camera_pos[i][0]/40.0, camera_pos[i][1]/40.0);
-                glVertex2f(camera_pos[i+1][0]/40.0, camera_pos[i+1][1]/40.0);
+                glVertex2f(camera_pos[i][0]/20.0, camera_pos[i][1]/20.0);
+                glVertex2f(camera_pos[i+1][0]/20.0, camera_pos[i+1][1]/20.0);
                 glEnd();
 
+        # OBJECTS DRAWING
+        for loc in objects_pos:
+            opengl_utils.draw_dot(loc[0]/20.0, loc[1]/20.0)
 
         # restoring settings
         # glBindTexture(GL_TEXTURE_2D, act_tex[0])
@@ -909,10 +1028,16 @@ class MainUIPanel(Panel):
         elif my_settings.enum_mode == 'CONSTRUCTING_MODE':
             column = box.column()
             row = column.row(align=True)
-            row.prop(context.scene, 'is_projection')
+            # row.prop(context.scene, 'is_projection')
             row.prop(context.scene, 'add_noise')
-            column.prop(context.scene, 'instance_nb')
-            column.operator('construction.instancing', text='Instancing', icon='BOIDS')
+            row.prop(context.scene, 'instance_nb')
+            column.prop(context.scene, 'construction_mode', text='Mode')
+            if (scene.construction_mode=='PLANE') or (scene.construction_mode=='PROJECTION'):
+                column.operator('construction.instancing', text='Instancing', icon='BOIDS')
+            elif scene.construction_mode=='DEPTH':
+                row = column.row()
+                row.operator('construction.interpret_contour', text='1. Interprete', icon='PARTICLE_DATA')
+                row.operator('construction.interpret_contour', text='2. Instancing', icon='BOIDS')
             column.separator()
             column.operator('layout.cleanstrokes', text='Clean Strokes', icon='MESH_CAPSULE')
 
@@ -1005,12 +1130,20 @@ def register():
     bpy.types.Scene.my_settings = PointerProperty(type=MySettingsProperty)
 
     # Construction
+    bpy.types.Scene.have_contour = bpy.props.BoolProperty(name='have_contour', default=False)
     bpy.types.Scene.add_noise = bpy.props.BoolProperty(name='Add Noise', default=False)
     bpy.types.Scene.is_projection = bpy.props.BoolProperty(name='Projection')
     bpy.types.Scene.instance_nb = bpy.props.IntProperty(name='#', default=6)
+    bpy.types.Scene.construction_mode = bpy.props.EnumProperty(name='Mode',
+                                                description='Construction Mode',
+                                                items=[('','',''),
+                                                       ('PLANE','Plane',''),
+                                                       ('PROJECTION','Projection',''),
+                                                       ('DEPTH','Depth','')],
+                                                default='')
 
     # Animation
-    bpy.types.Scene.enum_brushes = EnumProperty(name='Brushes',
+    bpy.types.Scene.enum_brushes = bpy.props.EnumProperty(name='Brushes',
                                                 description='Different Brushes',
                                                 items=[('','',''),
                                                        ('FOLLOWPATH','Path Following',''),
@@ -1030,6 +1163,7 @@ def unregister():
     del bpy.types.Scene.my_settings
 
     # Construction
+    del bpy.types.Scene.have_contour
     del bpy.types.Scene.add_noise
     del bpy.types.Scene.is_projection
     del bpy.types.Scene.instance_nb
