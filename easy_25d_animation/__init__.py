@@ -73,9 +73,9 @@ class MySettingsProperty(PropertyGroup):
     enum_mode = EnumProperty(name='Mode',
                              description='Different drawing mode',
                              items=[('LIGHTING_MODE','Lighting',''),
-                                    ('IMPORT_MODE','Import',''),
+                                    ('ANIMATION_MODE','Animation',''),
                                     ('CONSTRUCTING_MODE','Construction',''),
-                                    ('ANIMATION_MODE','Animation','')],
+                                    ('IMPORT_MODE','Import','')],
                              default='IMPORT_MODE')
 
 class MySettingsOperatorReset(bpy.types.Operator):
@@ -230,14 +230,14 @@ class ConstructionOperatorOnSurface(bpy.types.Operator):
         context.scene.on_surface = not context.scene.on_surface
         return {'FINISHED'}
 
-class ConstructionOperatorDepthInstancing(bpy.types.Operator):
-    bl_idname = "construction.depth_instancing"
-    bl_label = "Instancing based on curve (MUST have the contour first)"
+class ConstructionOperatorInstancing(bpy.types.Operator):
+    bl_idname = "construction.instancing"
+    bl_label = "Instancing"
     bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
     def poll(cls, context):
-        return (context.scene.grease_pencil!=None) and (context.scene.active_object!=None)
+        return (context.scene.grease_pencil!=None) and (context.active_object!=None)
 
     def invoke(self, context, event):
         gp = context.scene.grease_pencil
@@ -272,128 +272,53 @@ class ConstructionOperatorDepthInstancing(bpy.types.Operator):
                     z = verts[idx].z
                     shift.append((x,y,z))
 
-            # instancing (including animation data)
             model_obj = context.active_object
 
             for i in range(sampling_nb):
                 new_obj = model_obj.copy()
-                new_obj.location[0] = shift[i][0]
-                new_obj.location[1] = shift[i][1]
-                new_obj.location[2] = shift[i][2]
-                context.scene.objects.link(new_obj)
+                if (model_obj.animation_data!=None) and (model_obj.animation_data.action!=None):
+                    model_fcurve_x = model_obj.animation_data.action.fcurves[0]
+                    model_fcurve_y = model_obj.animation_data.action.fcurves[1]
+                    model_fcurve_z = model_obj.animation_data.action.fcurves[2]
+                    N = len(model_fcurve_x.keyframe_points)
 
-            bpy.ops.object.select_all(action='DESELECT')
-        return {'FINISHED'}
-
-
-class ConstructionOperatorPlaneInstancing(bpy.types.Operator):
-    bl_idname = "construction.plane_instancing"
-    bl_label = "Instancing based on plane strokes"
-    bl_options = {'REGISTER', 'UNDO'}
-
-    small_depth = 0
-
-    @classmethod
-    def poll(cls, context):
-        return (context.scene.grease_pencil != None) and (context.active_object!=None)
-
-    def invoke(self, context, event):
-        # import pdb; pdb.set_trace()
-        # if context.scene.construction_mode=="PROJECTION":
-        #     context.scene.is_projection=True
-        # else:
-        #     context.scene.is_projection=False
-
-        gp = context.scene.grease_pencil
-
-        obj = context.active_object
-        ly = gp.layers.active
-        if ly==None:
-            return {'FINISHED'}
-        af = ly.active_frame
-        if af==None:
-            return {'FINISHED'}
-        strokes = af.strokes
-
-        try:
-            stroke = strokes[-1]
-        except IndexError:
-            pass
-        else:
-            verts = []
-            points = stroke.points
-            for i in range(len(stroke.points)):
-                verts.append(points[i].co)
-
-            sampling_nb = min(context.scene.instance_nb, len(verts))
-            sampling_step = len(verts)/sampling_nb
-
-            shift = []
-            for i in range(sampling_nb):
-                idx = int(i*sampling_step)
-                if idx<len(verts):
-                    x = verts[idx].x
-                    y = verts[idx].y
-                    z = verts[idx].z
-                    shift.append((x,y,z))
-
-            # instancing (including animation data)
-            model_obj = context.active_object
-
-            # make some flags
-            is_copy_animation = (model_obj.animation_data!=None)
-            # is_projection = context.scene.is_projection
-
-            if is_copy_animation:
-                model_fcurve_x = model_obj.animation_data.action.fcurves[0]
-                model_fcurve_z = model_obj.animation_data.action.fcurves[1]
-                N = len(model_fcurve_x.keyframe_points)
-
-            for i in range(sampling_nb):
-                new_obj = model_obj.copy()
-                new_obj.data = model_obj.data.copy()
-
-                # if is_projection:
-                #     new_obj.location[1] = model_obj.location[1] + i*shift[i][2] # z denotes depth
-                # else:
-                new_obj.location[1] = model_obj.location[1] + context.scene.plane_construction_smalldepth
-
-                if is_copy_animation:
                     new_obj.animation_data_create()
                     new_obj.animation_data.action = bpy.data.actions.new(name="LocationAnimation")
 
                     fcurve_x = new_obj.animation_data.action.fcurves.new(data_path='location', index=0)
+                    fcurve_y = new_obj.animation_data.action.fcurves.new(data_path='location', index=1)
                     fcurve_z = new_obj.animation_data.action.fcurves.new(data_path='location', index=2)
 
                     x_pre = 0
                     z_pre = 0
 
                     for k in range(N):
-                        frame_idx = model_fcurve_x.keyframe_points[k].co[0] # (frame index, real f-value)
+                        frame_idx = model_fcurve_x.keyframe_points[k].co[0]
                         if k==0:
                             x_cur = shift[i][0]
+                            y_cur = shift[i][1]
                             z_cur = shift[i][2]
                         else:
                             x_cur = model_fcurve_x.keyframe_points[k].co[1]+x_pre2-x_pre
+                            y_cur = model_fcurve_y.keyframe_points[k].co[1]+y_pre2-y_pre
                             z_cur = model_fcurve_z.keyframe_points[k].co[1]+z_pre2-z_pre
+
                         fcurve_x.keyframe_points.insert(frame_idx, x_cur+random.gauss(0, 0.05), {'FAST'})
+                        fcurve_y.keyframe_points.insert(frame_idx, y_cur+random.gauss(0, 0.05), {'FAST'})
                         fcurve_z.keyframe_points.insert(frame_idx, z_cur+random.gauss(0, 0.05), {'FAST'})
 
                         x_pre = model_fcurve_x.keyframe_points[k].co[1]
+                        y_pre = model_fcurve_y.keyframe_points[k].co[1]
                         z_pre = model_fcurve_z.keyframe_points[k].co[1]
 
                         x_pre2 = x_cur
+                        y_pre2 = y_cur
                         z_pre2 = z_cur
                 else:
-                    # if is_projection:
-                    #     new_obj.location[0] = shift[0][0]
-                    #     new_obj.location[2] = shift[0][2]
-                    # else:
                     new_obj.location[0] = shift[i][0]
+                    new_obj.location[1] = shift[i][1]
                     new_obj.location[2] = shift[i][2]
-
                 context.scene.objects.link(new_obj)
-                context.scene.plane_construction_smalldepth += 0.001 # prevent z shadowing
 
             bpy.ops.object.select_all(action='DESELECT')
         return {'FINISHED'}
@@ -508,6 +433,16 @@ class AnimationOperatorARAP(bpy.types.Operator):
                 vco_new = self.res_length[idx]*f_hat + q_star[idx]
                 self.mesh.vertices[idx].co[0] = vco_new[0]
                 self.mesh.vertices[idx].co[1] = vco_new[1]
+
+                if self.fcurve_x[vert.index]==None:
+                    self.fcurve_x[vert.index] = self.action.fcurves.new('vertices[%d].co'%vert.index, index=0)
+                self.fcurve_x[vert.index].keyframe_points.insert(self.frames[self.counter], vco_new[0], {'FAST'})
+                if self.fcurve_y[vert.index]==None:
+                    self.fcurve_y[vert.index] = self.action.fcurves.new('vertices[%d].co'%vert.index, index=1)
+                self.fcurve_y[vert.index].keyframe_points.insert(self.frames[self.counter], vco_new[1], {'FAST'})
+
+            if self.counter < context.scene.frame_block_nb-1:
+                self.counter+=1
             return {'RUNNING_MODAL'}
 
         return {'PASS_THROUGH'}
@@ -571,6 +506,21 @@ class AnimationOperatorARAP(bpy.types.Operator):
 
         self.obj = context.active_object
         self.mesh = self.obj.data
+
+        # ADD animation data
+        self.counter = 0
+        self.frames = [context.scene.current_frame+i for i in range(context.scene.frame_block_nb)]
+        if self.mesh.animation_data==None:
+            self.mesh.animation_data_create()
+            action = bpy.data.actions.new(name='ARAP_Animation')
+            self.mesh.animation_data.action = action
+
+        self.fcurve_x = {}
+        self.fcurve_y = {}
+        for i in range(len(self.mesh.vertices)):
+            self.fcurve_x[i] = None
+            self.fcurve_y[i] = None
+        self.action = self.mesh.animation_data.action
 
         # Image Deformation Using Moving Least Squares
         self.p = []
@@ -682,6 +632,7 @@ class AnimationOperatorUpdate(bpy.types.Operator):
                 N = len(stroke.points)
 
                 fcurve_x = obj.animation_data.action.fcurves.new(data_path='location', index=0)
+                fcurve_y = obj.animation_data.action.fcurves.new(data_path='location', index=1)
                 fcurve_z = obj.animation_data.action.fcurves.new(data_path='location', index=2)
 
                 i = 0
@@ -689,13 +640,14 @@ class AnimationOperatorUpdate(bpy.types.Operator):
                     idx = int(i*2)
                     position = stroke.points[idx].co
                     fcurve_x.keyframe_points.insert(context.scene.current_frame+idx, position[0], {'FAST'})
+                    fcurve_y.keyframe_points.insert(context.scene.current_frame+idx, position[1], {'FAST'})
                     fcurve_z.keyframe_points.insert(context.scene.current_frame+idx, position[2], {'FAST'})
                     i+=1
 
         elif context.scene.enum_brushes=='HPOINT':
             mesh = obj.data
             mesh.animation_data_create()
-            action = bpy.data.actions.new(name='MeshAnimation')
+            action = bpy.data.actions.new(name='HPOINT_Animation')
             mesh.animation_data.action = action
 
             # Point handler
@@ -1060,6 +1012,7 @@ class CameraUIPanel(Panel):
         box = layout.box()
         box.prop(camera, 'location', text='LF/RT', index=0)
         box.prop(camera, 'location', text='FWD/BWD', index=1)
+        box.prop(camera, 'rotation_euler', text='Rotation', index=2)
         box.separator()
         box.operator('camera.setting', text='Set', icon='RENDER_STILL')
 
@@ -1102,21 +1055,11 @@ class MainUIPanel(Panel):
         elif my_settings.enum_mode == 'CONSTRUCTING_MODE':
             column = box.column()
             row = column.row(align=True)
-            # row.prop(context.scene, 'is_projection')
             row.prop(context.scene, 'add_noise')
             row.prop(context.scene, 'instance_nb')
             column.separator()
-            column.prop(context.scene, 'construction_mode', text='Mode')
-            if (scene.construction_mode=='PLANE'):
-                column.operator('construction.plane_instancing', text='Instancing', icon='BOIDS')
-            elif scene.construction_mode=='DEPTH':
-                row = column.row()
-                row.operator('construction.interpret_contour', text='Interprete', icon='PARTICLE_DATA')
-                if context.scene.on_surface==True:
-                    row.operator('construction.on_surface', text='Surface', icon='SURFACE_NSURFACE')
-                else:
-                    row.operator('construction.on_surface', text='Cursor', icon='LAYER_ACTIVE')
-                column.operator('construction.depth_instancing', text='Instancing', icon='BOIDS')
+            # column.prop(context.scene, 'construction_mode', text='Mode')
+            column.operator('construction.instancing', text='Instancing', icon='BOIDS')
             column.separator()
             column.operator('layout.cleanstrokes', text='Clean Strokes', icon='MESH_CAPSULE')
 
@@ -1154,6 +1097,12 @@ class MainUIPanel(Panel):
         row=col.row(align=True)
         row.operator('gpencil.draw', text='Draw', icon='BRUSH_DATA').mode='DRAW'
         row.operator('transform.resize', text='Scale', icon='VIEWZOOM')
+        row=col.row(align=True)
+        row.operator('construction.interpret_contour', text='Interprete', icon='PARTICLE_DATA')
+        if context.scene.on_surface==True:
+            row.operator('construction.on_surface', text='Surface', icon='SURFACE_NSURFACE')
+        else:
+            row.operator('construction.on_surface', text='Cursor', icon='LAYER_ACTIVE')
         row=col.row(align=True)
         row.operator('object.delete', text='Delete', icon='X')
         row.operator('mysettings.reset', text='Reset', icon='HAND')
@@ -1212,15 +1161,7 @@ def register():
     # Construction
     bpy.types.Scene.on_surface = bpy.props.BoolProperty(name='on_surface', default=False)
     bpy.types.Scene.add_noise = bpy.props.BoolProperty(name='Add Noise', default=False)
-    # bpy.types.Scene.is_projection = bpy.props.BoolProperty(name='Projection')
     bpy.types.Scene.instance_nb = bpy.props.IntProperty(name='#', default=6)
-    bpy.types.Scene.construction_mode = bpy.props.EnumProperty(name='Mode',
-                                                description='Construction Mode',
-                                                items=[('','',''),
-                                                       ('PLANE','Plane',''),
-                                                       ('DEPTH','Depth','')],
-                                                default='')
-
     bpy.types.Scene.plane_construction_smalldepth = bpy.props.FloatProperty(name='small_depth', default=0.0)
 
     # Animation
