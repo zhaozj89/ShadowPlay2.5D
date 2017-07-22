@@ -163,23 +163,76 @@ class ConstructionOperatorInterpreteContour(bpy.types.Operator):
             black_col.name = 'black'
             black_col.color = (0.0,0.0,0.0)
 
-        strokes.remove(contour_stroke)
-        stroke = af.strokes.new(colorname=black_col.name)
-        stroke.draw_mode = '3DSPACE'
-        stroke.line_width = 6
-        stroke.points.add(count = len(points_image))
-
         M.invert()
         np_M = np.array(M)
+        res_points = []
         for i, point in enumerate(points_image):
             first = np.dot(np_M[:,0:2], point[0:2]) + np_M[:,3]
             second = np_M[:,2]
             d = -first[2]/second[2]
             res = first + d*second
             res /= res[3]
-            stroke.points[i].co = res[0:3]
+            res_points.append(res[0:3])
+
+        points_nb = min(10, len(res_points))
+
+        strokes.remove(contour_stroke)
+        stroke = af.strokes.new(colorname=black_col.name)
+        stroke.draw_mode = '3DSPACE'
+        stroke.line_width = 6
+        stroke.points.add(count = points_nb)
+
+        if len(res_points)<points_nb:
+            for idx in range(points_nb):
+                stroke.points[idx].co = res_points[idx]
+        else:
+            for idx in range(points_nb):
+                stroke.points[idx].co = res_points[idx*int(len(res_points)/points_nb)]
+
+        contour_stroke = strokes[-1]
+        contour_stroke.select = True
+        bpy.ops.gpencil.convert(type='PATH')
+        strokes.remove(contour_stroke)
+        objs = bpy.data.objects
+
+        select_obj = None
+        for obj in objs:
+            if obj.name[0:8]=='GP_Layer':
+                select_obj = obj
+                break
+
+        if select_obj==None:
+            return {'FINISHED'}
+
+        bpy.context.scene.objects.active = select_obj
+        bpy.ops.object.mode_set(mode='OBJECT')
+        bpy.ops.object.convert(target='MESH')
+
+        bpy.ops.object.mode_set(mode='EDIT')
+        bpy.ops.mesh.select_all(action='TOGGLE')
+
+        bpy.ops.view3d.edit_mesh_extrude_move_normal()
 
         context.scene.have_contour = True
+        return {'FINISHED'}
+
+class ConstructionOperatorOnSurface(bpy.types.Operator):
+    bl_idname = "construction.on_surface"
+    bl_label = "Grease pencil on surface or 3D cursor"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        return (context.scene.have_contour==True)
+
+    def invoke(self, context, event):
+        bpy.ops.object.mode_set(mode='OBJECT')
+        if context.scene.on_surface==True:
+            context.scene.tool_settings.gpencil_stroke_placement_view3d='CURSOR'
+        else:
+            context.scene.tool_settings.gpencil_stroke_placement_view3d='SURFACE'
+
+        context.scene.on_surface = not context.scene.on_surface
         return {'FINISHED'}
 
 class ConstructionOperatorCurveInstancing(bpy.types.Operator):
@@ -189,7 +242,7 @@ class ConstructionOperatorCurveInstancing(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return (context.scene.grease_pencil!=None) and (context.scene.active_object!=None) and (context.scene.have_contour==True)
+        return (context.scene.grease_pencil!=None) and (context.scene.active_object!=None)
 
     def invoke(self, context, event):
         gp = context.scene.grease_pencil
@@ -202,13 +255,16 @@ class ConstructionOperatorCurveInstancing(bpy.types.Operator):
         if af==None:
             return {'FINISHED'}
         strokes = af.strokes
-        if (strokes==None) or (len(strokes)<2):
+        if (strokes==None) or (len(strokes)<3):
             return {'FINISHED'}
 
+        contour_stroke_original = strokes[-3]
         contour_stroke = strokes[-2]
         path_stroke = strokes[-1]
 
+        # curve fitting
 
+        strokes.remove(contour_stroke_original)
 
         return {'FINISHED'}
 
@@ -1036,8 +1092,12 @@ class MainUIPanel(Panel):
                 column.operator('construction.instancing', text='Instancing', icon='BOIDS')
             elif scene.construction_mode=='DEPTH':
                 row = column.row()
-                row.operator('construction.interpret_contour', text='1. Interprete', icon='PARTICLE_DATA')
-                row.operator('construction.interpret_contour', text='2. Instancing', icon='BOIDS')
+                row.operator('construction.interpret_contour', text='Interprete', icon='PARTICLE_DATA')
+                if context.scene.on_surface==True:
+                    row.operator('construction.on_surface', text='Surface', icon='SURFACE_NSURFACE')
+                else:
+                    row.operator('construction.on_surface', text='Cursor', icon='LAYER_ACTIVE')
+                column.operator('construction.curve_instancing', text='Instancing', icon='BOIDS')
             column.separator()
             column.operator('layout.cleanstrokes', text='Clean Strokes', icon='MESH_CAPSULE')
 
@@ -1130,7 +1190,7 @@ def register():
     bpy.types.Scene.my_settings = PointerProperty(type=MySettingsProperty)
 
     # Construction
-    bpy.types.Scene.have_contour = bpy.props.BoolProperty(name='have_contour', default=False)
+    bpy.types.Scene.on_surface = bpy.props.BoolProperty(name='on_surface', default=False)
     bpy.types.Scene.add_noise = bpy.props.BoolProperty(name='Add Noise', default=False)
     bpy.types.Scene.is_projection = bpy.props.BoolProperty(name='Projection')
     bpy.types.Scene.instance_nb = bpy.props.IntProperty(name='#', default=6)
@@ -1163,7 +1223,7 @@ def unregister():
     del bpy.types.Scene.my_settings
 
     # Construction
-    del bpy.types.Scene.have_contour
+    del bpy.types.Scene.on_surface
     del bpy.types.Scene.add_noise
     del bpy.types.Scene.is_projection
     del bpy.types.Scene.instance_nb
