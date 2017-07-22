@@ -213,17 +213,12 @@ class ConstructionOperatorInterpreteContour(bpy.types.Operator):
 
         bpy.ops.view3d.edit_mesh_extrude_move_normal()
 
-        context.scene.have_contour = True
         return {'FINISHED'}
 
 class ConstructionOperatorOnSurface(bpy.types.Operator):
     bl_idname = "construction.on_surface"
     bl_label = "Grease pencil on surface or 3D cursor"
     bl_options = {'REGISTER', 'UNDO'}
-
-    @classmethod
-    def poll(cls, context):
-        return (context.scene.have_contour==True)
 
     def invoke(self, context, event):
         bpy.ops.object.mode_set(mode='OBJECT')
@@ -235,8 +230,8 @@ class ConstructionOperatorOnSurface(bpy.types.Operator):
         context.scene.on_surface = not context.scene.on_surface
         return {'FINISHED'}
 
-class ConstructionOperatorCurveInstancing(bpy.types.Operator):
-    bl_idname = "construction.curve_instancing"
+class ConstructionOperatorDepthInstancing(bpy.types.Operator):
+    bl_idname = "construction.depth_instancing"
     bl_label = "Instancing based on curve (MUST have the contour first)"
     bl_options = {'REGISTER', 'UNDO'}
 
@@ -247,7 +242,6 @@ class ConstructionOperatorCurveInstancing(bpy.types.Operator):
     def invoke(self, context, event):
         gp = context.scene.grease_pencil
 
-        obj = context.active_object
         ly = gp.layers.active
         if ly==None:
             return {'FINISHED'}
@@ -255,22 +249,46 @@ class ConstructionOperatorCurveInstancing(bpy.types.Operator):
         if af==None:
             return {'FINISHED'}
         strokes = af.strokes
-        if (strokes==None) or (len(strokes)<3):
-            return {'FINISHED'}
 
-        contour_stroke_original = strokes[-3]
-        contour_stroke = strokes[-2]
-        path_stroke = strokes[-1]
+        try:
+            stroke = strokes[-1]
+        except IndexError:
+            pass
+        else:
+            verts = []
+            points = stroke.points
+            for i in range(len(stroke.points)):
+                verts.append(points[i].co)
 
-        # curve fitting
+            sampling_nb = min(context.scene.instance_nb, len(verts))
+            sampling_step = len(verts)/sampling_nb
 
-        strokes.remove(contour_stroke_original)
+            shift = []
+            for i in range(sampling_nb):
+                idx = int(i*sampling_step)
+                if idx<len(verts):
+                    x = verts[idx].x
+                    y = verts[idx].y
+                    z = verts[idx].z
+                    shift.append((x,y,z))
 
+            # instancing (including animation data)
+            model_obj = context.active_object
+
+            for i in range(sampling_nb):
+                new_obj = model_obj.copy()
+                new_obj.location[0] = shift[i][0]
+                new_obj.location[1] = shift[i][1]
+                new_obj.location[2] = shift[i][2]
+                context.scene.objects.link(new_obj)
+
+            bpy.ops.object.select_all(action='DESELECT')
         return {'FINISHED'}
 
-class ConstructionOperatorInstancing(bpy.types.Operator):
-    bl_idname = "construction.instancing"
-    bl_label = "Instancing based on strokes"
+
+class ConstructionOperatorPlaneInstancing(bpy.types.Operator):
+    bl_idname = "construction.plane_instancing"
+    bl_label = "Instancing based on plane strokes"
     bl_options = {'REGISTER', 'UNDO'}
 
     small_depth = 0
@@ -281,10 +299,10 @@ class ConstructionOperatorInstancing(bpy.types.Operator):
 
     def invoke(self, context, event):
         # import pdb; pdb.set_trace()
-        if context.scene.construction_mode=="PROJECTION":
-            context.scene.is_projection=True
-        else:
-            context.scene.is_projection=False
+        # if context.scene.construction_mode=="PROJECTION":
+        #     context.scene.is_projection=True
+        # else:
+        #     context.scene.is_projection=False
 
         gp = context.scene.grease_pencil
 
@@ -324,7 +342,7 @@ class ConstructionOperatorInstancing(bpy.types.Operator):
 
             # make some flags
             is_copy_animation = (model_obj.animation_data!=None)
-            is_projection = context.scene.is_projection
+            # is_projection = context.scene.is_projection
 
             if is_copy_animation:
                 model_fcurve_x = model_obj.animation_data.action.fcurves[0]
@@ -335,10 +353,10 @@ class ConstructionOperatorInstancing(bpy.types.Operator):
                 new_obj = model_obj.copy()
                 new_obj.data = model_obj.data.copy()
 
-                if is_projection:
-                    new_obj.location[1] = model_obj.location[1] + i*shift[i][2] # z denotes depth
-                else:
-                    new_obj.location[1] = model_obj.location[1] + ConstructionOperatorInstancing.small_depth
+                # if is_projection:
+                #     new_obj.location[1] = model_obj.location[1] + i*shift[i][2] # z denotes depth
+                # else:
+                new_obj.location[1] = model_obj.location[1] + context.scene.plane_construction_smalldepth
 
                 if is_copy_animation:
                     new_obj.animation_data_create()
@@ -367,15 +385,15 @@ class ConstructionOperatorInstancing(bpy.types.Operator):
                         x_pre2 = x_cur
                         z_pre2 = z_cur
                 else:
-                    if is_projection:
-                        new_obj.location[0] = shift[0][0]
-                        new_obj.location[2] = shift[0][2]
-                    else:
-                        new_obj.location[0] = shift[i][0]
-                        new_obj.location[2] = shift[i][2]
+                    # if is_projection:
+                    #     new_obj.location[0] = shift[0][0]
+                    #     new_obj.location[2] = shift[0][2]
+                    # else:
+                    new_obj.location[0] = shift[i][0]
+                    new_obj.location[2] = shift[i][2]
 
                 context.scene.objects.link(new_obj)
-                ConstructionOperatorInstancing.small_depth += 0.001 # prevent z shadowing
+                context.scene.plane_construction_smalldepth += 0.001 # prevent z shadowing
 
             bpy.ops.object.select_all(action='DESELECT')
         return {'FINISHED'}
@@ -1087,9 +1105,10 @@ class MainUIPanel(Panel):
             # row.prop(context.scene, 'is_projection')
             row.prop(context.scene, 'add_noise')
             row.prop(context.scene, 'instance_nb')
+            column.separator()
             column.prop(context.scene, 'construction_mode', text='Mode')
-            if (scene.construction_mode=='PLANE') or (scene.construction_mode=='PROJECTION'):
-                column.operator('construction.instancing', text='Instancing', icon='BOIDS')
+            if (scene.construction_mode=='PLANE'):
+                column.operator('construction.plane_instancing', text='Instancing', icon='BOIDS')
             elif scene.construction_mode=='DEPTH':
                 row = column.row()
                 row.operator('construction.interpret_contour', text='Interprete', icon='PARTICLE_DATA')
@@ -1097,7 +1116,7 @@ class MainUIPanel(Panel):
                     row.operator('construction.on_surface', text='Surface', icon='SURFACE_NSURFACE')
                 else:
                     row.operator('construction.on_surface', text='Cursor', icon='LAYER_ACTIVE')
-                column.operator('construction.curve_instancing', text='Instancing', icon='BOIDS')
+                column.operator('construction.depth_instancing', text='Instancing', icon='BOIDS')
             column.separator()
             column.operator('layout.cleanstrokes', text='Clean Strokes', icon='MESH_CAPSULE')
 
@@ -1115,11 +1134,10 @@ class MainUIPanel(Panel):
             column.operator('layout.cleanstrokes', text='Clean Strokes', icon='MESH_CAPSULE')
 
         elif my_settings.enum_mode == 'LIGHTING_MODE':
-            view = context.space_data
+            # view = context.space_data
             world = context.scene.world
-            row = box.row()
-            row.prop(view, "show_floor", text="Show Floor")
-            row.prop(view, 'show_world', text='Show World')
+            # row = box.row()
+            # row.prop(view, 'show_world', text='Show World')
             row = box.row()
             row.prop(world, 'use_sky_paper', text='Skey Color')
             row.prop(world, 'use_sky_blend', text='Ground Color')
@@ -1146,6 +1164,8 @@ class MainUIPanel(Panel):
             col.operator("animation.preview", text="Pause", icon='PAUSE')
         else:
             col.operator('animation.preview', text='Preview', icon='RIGHTARROW')
+        col.separator()
+        col.prop(context.space_data, "show_floor", text="Show Floor")
         col.operator('view3d.offscreen_draw', text='Show OverView', icon='MESH_UVSPHERE')
 
 
@@ -1192,15 +1212,16 @@ def register():
     # Construction
     bpy.types.Scene.on_surface = bpy.props.BoolProperty(name='on_surface', default=False)
     bpy.types.Scene.add_noise = bpy.props.BoolProperty(name='Add Noise', default=False)
-    bpy.types.Scene.is_projection = bpy.props.BoolProperty(name='Projection')
+    # bpy.types.Scene.is_projection = bpy.props.BoolProperty(name='Projection')
     bpy.types.Scene.instance_nb = bpy.props.IntProperty(name='#', default=6)
     bpy.types.Scene.construction_mode = bpy.props.EnumProperty(name='Mode',
                                                 description='Construction Mode',
                                                 items=[('','',''),
                                                        ('PLANE','Plane',''),
-                                                       ('PROJECTION','Projection',''),
                                                        ('DEPTH','Depth','')],
                                                 default='')
+
+    bpy.types.Scene.plane_construction_smalldepth = bpy.props.FloatProperty(name='small_depth', default=0.0)
 
     # Animation
     bpy.types.Scene.enum_brushes = bpy.props.EnumProperty(name='Brushes',
@@ -1225,8 +1246,8 @@ def unregister():
     # Construction
     del bpy.types.Scene.on_surface
     del bpy.types.Scene.add_noise
-    del bpy.types.Scene.is_projection
     del bpy.types.Scene.instance_nb
+    del bpy.types.Scene.plane_construction_smalldepth
 
     # Animation
     del bpy.types.Scene.enum_brushes
