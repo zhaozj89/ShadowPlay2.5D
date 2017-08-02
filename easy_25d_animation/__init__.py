@@ -189,6 +189,31 @@ class ConstructionOperatorInterpreteContour(bpy.types.Operator):
             for idx in range(points_nb):
                 stroke.points[idx].co = res_points[idx*int(len(res_points)/points_nb)]
 
+        return {'FINISHED'}
+
+class ConstructionOperatorGenerateSurface(bpy.types.Operator):
+    bl_idname = "construction.generate_surface"
+    bl_label = "Generate Surface"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        return (context.scene.grease_pencil!=None)
+
+    def invoke(self, context, event):
+        gp = context.scene.grease_pencil
+
+        obj = context.active_object
+        ly = gp.layers.active
+        if ly==None:
+            return {'FINISHED'}
+        af = ly.active_frame
+        if af==None:
+            return {'FINISHED'}
+        strokes = af.strokes
+        if (strokes==None) or (len(strokes)<1):
+            return {'FINISHED'}
+
         contour_stroke = strokes[-1]
         contour_stroke.select = True
         bpy.ops.gpencil.convert(type='PATH')
@@ -214,6 +239,7 @@ class ConstructionOperatorInterpreteContour(bpy.types.Operator):
         bpy.ops.view3d.edit_mesh_extrude_move_normal()
 
         return {'FINISHED'}
+
 
 class ConstructionOperatorOnSurface(bpy.types.Operator):
     bl_idname = "construction.on_surface"
@@ -719,6 +745,20 @@ class AnimationOperatorPreview(bpy.types.Operator):
 
         return {'FINISHED'}
 
+class AnimationOperatorAddBone(bpy.types.Operator):
+    bl_idname = 'animation.add_bone'
+    bl_label = 'Add Bone'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def invoke(self, context, event):
+        bpy.ops.object.armature_add()
+        ob = bpy.context.scene.objects.active
+        ob.data.draw_type = 'STICK'
+        ob.show_x_ray = True
+        bpy.ops.object.mode_set(mode='EDIT')
+
+        return {'FINISHED'}
+
 ################################################################################
 # Recording
 ################################################################################
@@ -1073,6 +1113,11 @@ class MainUIPanel(Panel):
                 row = column.row()
                 row.operator('gpencil.draw', text='Add CP', icon='EDIT').mode='DRAW'
                 row.operator('animation.animation_arap', text='Deform', icon='OUTLINER_DATA_MESH')
+                row = column.row()
+                row.operator('animation.add_bone', text='Add Bone', icon='BONE_DATA')
+                row.operator('armature.extrude', text='Extrude Bone')
+                row = column.row()
+                row.operator('armature.extrude', text='Bone Deform', icon='OUTLINER_DATA_MESH')
             column.separator()
             column.operator('layout.cleanstrokes', text='Clean Strokes', icon='MESH_CAPSULE')
 
@@ -1095,10 +1140,22 @@ class MainUIPanel(Panel):
         box.label('Tools')
         col = box.column()
         row=col.row(align=True)
-        row.operator('gpencil.draw', text='Draw', icon='BRUSH_DATA').mode='DRAW'
+        # if bpy.context.active_object.mode=='OBJECT':
+        #     context.scene.edit_mode=='Object'
+        # elif bpy.context.active_object.mode=='EIDT':
+        #     context.scene.edit_mode=='Edit'
+        # elif bpy.context.active_object.mode=='POSE':
+        #     context.scene.edit_mode=='Pose'
+        row.prop(context.scene, "edit_mode", text="Mode")
+        row=col.row(align=True)
+        row.operator('transform.translate', text='Translate', icon='NDOF_TRANS')
+        row.operator('transform.rotate', text='Rotate', icon='NDOF_TURN')
         row.operator('transform.resize', text='Scale', icon='VIEWZOOM')
         row=col.row(align=True)
+        row.operator('gpencil.draw', text='Draw', icon='BRUSH_DATA').mode='DRAW'
         row.operator('construction.interpret_contour', text='Interprete', icon='PARTICLE_DATA')
+        row=col.row(align=True)
+        row.operator('construction.generate_surface', text='Generate Surface')
         if context.scene.on_surface==True:
             row.operator('construction.on_surface', text='Surface', icon='SURFACE_NSURFACE')
         else:
@@ -1152,11 +1209,27 @@ class RenderingUIPanel(Panel):
 ################################################################################
 # Logic:
 ################################################################################
+def update_mode_func(self, context):
+    mode = context.scene.edit_mode
+    if mode=='Object':
+        bpy.ops.object.mode_set(mode='OBJECT')
+    elif mode=='Edit':
+        bpy.ops.object.mode_set(mode='EDIT')
+    elif mode=='Pose':
+        bpy.ops.object.mode_set(mode='POSE')
 
 def register():
     bpy.utils.register_module(__name__)
 
     bpy.types.Scene.my_settings = PointerProperty(type=MySettingsProperty)
+
+    bpy.types.Scene.edit_mode = bpy.props.EnumProperty(name='Edit Mode',
+                                                    description='Different Modes',
+                                                    items=[('','',''),
+                                                           ('Object','Object',''),
+                                                           ('Edit','Edit',''),
+                                                           ('Pose','Pose','')],
+                                                    default='', update=update_mode_func)
 
     # Construction
     bpy.types.Scene.on_surface = bpy.props.BoolProperty(name='on_surface', default=False)
