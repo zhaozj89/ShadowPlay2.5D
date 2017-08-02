@@ -48,6 +48,7 @@ import os
 import sys
 import math
 import mathutils
+from mathutils import Vector, Matrix
 import bpy
 from bgl import *
 import bpy.utils.previews
@@ -240,7 +241,6 @@ class ConstructionOperatorGenerateSurface(bpy.types.Operator):
 
         return {'FINISHED'}
 
-
 class ConstructionOperatorOnSurface(bpy.types.Operator):
     bl_idname = "construction.on_surface"
     bl_label = "Grease pencil on surface or 3D cursor"
@@ -371,6 +371,158 @@ class ConstructionOperatorCleanStrokes(bpy.types.Operator):
 ################################################################################
 
 # Operator
+# https://wiki.blender.org/index.php/Dev:IT/2.5/Py/Scripts/Cookbook/Code_snippets/Armatures
+class AnimationOperatorBone(bpy.types.Operator):
+    bl_idname = 'animation.animation_bone'
+    bl_label = 'Animation Bone'
+    bl_options = {'REGISTER','UNDO'}
+
+    def _createRig(self, name, origin, boneTable):
+        bpy.ops.object.add(type='ARMATURE', enter_editmode=True, location=Vector((0,0,0)))
+        ob = bpy.context.object
+        ob.show_x_ray = True
+        ob.name = name
+        amt = ob.data
+        amt.draw_type = 'STICK'
+        amt.name = name+'Amt'
+        amt.show_axes = True
+
+        # Create bones
+        bpy.ops.object.mode_set(mode='EDIT')
+        for (bname, pname, head, tail) in boneTable:
+            bone = amt.edit_bones.new(bname)
+            if pname:
+                parent = amt.edit_bones[pname]
+                bone.use_connect = False
+
+            bone.head = head
+            bone.tail = tail
+        bpy.ops.object.mode_set(mode='OBJECT')
+        return ob
+
+    @classmethod
+    def poll(cls, context):
+        return (context.active_object!=None) and (context.scene.grease_pencil!=None)
+
+    def invoke(self, context, event):
+        self.obj = context.active_object
+        gp = context.scene.grease_pencil
+
+        if gp.layers==None:
+            return {'FINISHED'}
+        ly = gp.layers.active
+        if ly==None:
+            return {'FINISHED'}
+        af = ly.active_frame
+        if af==None:
+            return {'FINISHED'}
+        strokes = af.strokes
+
+        if (strokes==None):
+            return {'FINISHED'}
+
+        pre_name = None
+        boneTable = []
+        for idx, stroke in enumerate(strokes):
+            points = stroke.points
+            if len(points)==0:
+                continue
+            else:
+                tail = points[-1].co
+                head = points[0].co
+
+            current_name = 'bone' + str(idx)
+            item = (current_name, pre_name, head, tail)
+            boneTable.append(item)
+            pre_name = current_name
+
+        bent = self._createRig(self.obj.name, self.obj.location, boneTable)
+
+        self.obj.select = True
+        bpy.ops.object.parent_set(type="ARMATURE_AUTO")
+
+        for stroke in strokes:
+            strokes.remove(stroke)
+        return {'FINISHED'}
+
+class AnimationOperatorBoneDeform(bpy.types.Operator):
+    bl_idname = 'animation.bone_deform'
+    bl_label = 'Animation Bone Deform'
+    bl_options = {'REGISTER','UNDO'}
+
+    def __init__(self):
+        print('start')
+        self.counter = 0
+        self.left_pressed = False
+        bpy.ops.object.mode_set(mode='POSE')
+
+    # potential bug, be careful about it
+    def __del__(self):
+        print('delete')
+        # bpy.ops.object.mode_set(mode='OBJECT')
+
+    @classmethod
+    def poll(cls, context):
+        return (context.active_object!=None) and (type(context.active_object.data)==bpy.types.Armature)
+
+    def modal(self, context, event):
+        if event.type == 'LEFTMOUSE':
+            if event.value == 'PRESS':
+                x, y = event.mouse_region_x, event.mouse_region_y
+                loc = region_2d_to_location_3d(context.region, context.space_data.region_3d, (x, y), bpy.context.scene.cursor_location)
+                self.pre_loc = loc
+
+                bones = context.active_object.pose.bones
+                min_dist = sys.float_info.max
+                for bone in bones:
+                    dist = LA.norm(np.array((loc-bone.center)), 2)
+                    if dist<min_dist:
+                        min_dist = dist
+                        self.bone = bone
+                        # bone.select = True
+                self.left_pressed = True
+                return {'RUNNING_MODAL'}
+
+            if event.value == 'RELEASE':
+                return {'FINISHED'}
+        if (event.type == 'MOUSEMOVE') and (self.left_pressed==True):
+            x, y = event.mouse_region_x, event.mouse_region_y
+            loc = region_2d_to_location_3d(context.region, context.space_data.region_3d, (x, y), bpy.context.scene.cursor_location)
+
+            self.bone.rotation_mode = 'XYZ'
+            axis = 'Z'
+            vec1 = loc - self.bone.head
+            vec2 = self.pre_loc - self.bone.head
+
+            angle = vec1.angle(vec2)
+
+            vec3 = self.bone.head - bpy.data.objects['Camera'].location
+
+            v1 = np.cross(np.array(vec1), np.array(vec2))
+
+            sign = np.dot(v1, vec3)
+            if sign<0:
+                angle = -angle
+
+            self.bone.rotation_euler.rotate_axis(axis, angle)
+
+            self.pre_loc = loc
+
+            self.bone.keyframe_insert(data_path="rotation_euler" ,frame=self.frames[self.counter])
+
+            if self.counter < context.scene.frame_block_nb-1:
+                self.counter+=1
+
+            return {'RUNNING_MODAL'}
+
+        return {'PASS_THROUGH'}
+
+    def invoke(self, context, event):
+        self.frames = [context.scene.current_frame+i for i in range(context.scene.frame_block_nb)]
+        context.window_manager.modal_handler_add(self)
+        return {'RUNNING_MODAL'}
+
+
 class AnimationOperatorARAP(bpy.types.Operator):
     bl_idname = 'animation.animation_arap'
     bl_label = 'Animation ARAP'
@@ -1111,13 +1263,18 @@ class MainUIPanel(Panel):
                 column.operator('animation.animation_update', text='Update', icon='ANIM')
             elif scene.enum_brushes=='ARAP':
                 row = column.row()
-                row.operator('gpencil.draw', text='Add CP', icon='EDIT').mode='DRAW'
-                row.operator('animation.animation_arap', text='Deform', icon='OUTLINER_DATA_MESH')
+                # row.operator('gpencil.draw', text='Add CP', icon='EDIT').mode='DRAW'
+                row.operator('animation.animation_arap', text='Point Interprete and Deform', icon='OUTLINER_DATA_MESH')
                 row = column.row()
-                row.operator('animation.add_bone', text='Add Bone', icon='BONE_DATA')
-                row.operator('armature.extrude', text='Extrude Bone')
-                row = column.row()
-                row.operator('armature.extrude', text='Bone Deform', icon='OUTLINER_DATA_MESH')
+                # row.operator('gpencil.draw', text='Add Bone', icon='BONE_DATA').mode='DRAW'
+                row.operator('animation.animation_bone', text='Bone Interprete', icon='BONE_DATA')
+                row.operator('animation.bone_deform', text='Bone Deform', icon='OUTLINER_DATA_MESH')
+                # row = column.row()
+                # row.operator('animation.add_bone', text='Add Bone', icon='BONE_DATA')
+                # row.operator('armature.extrude', text='Extrude Bone')
+                # row = column.row()
+                # row.operator('object.parent_set', text='Bind', icon='CONSTRAINT')
+                # row.operator('object.parent_set', text='Bone Deform', icon='OUTLINER_DATA_MESH')
             column.separator()
             column.operator('layout.cleanstrokes', text='Clean Strokes', icon='MESH_CAPSULE')
 
