@@ -48,7 +48,7 @@ import os
 import sys
 import math
 import mathutils
-from mathutils import Vector, Matrix
+from mathutils import Vector, Matrix, Euler
 import bpy
 from bgl import *
 import bpy.utils.previews
@@ -58,6 +58,7 @@ from bpy.app.handlers import persistent
 from bpy.types import (Panel, Operator, PropertyGroup, UIList, Menu)
 from bpy.props import (StringProperty, BoolProperty, IntProperty, FloatProperty, EnumProperty, PointerProperty)
 from bpy_extras.view3d_utils import region_2d_to_location_3d, region_2d_to_vector_3d
+from bpy.props import FloatVectorProperty
 
 # depends on sklean
 import numpy as np
@@ -101,6 +102,76 @@ class MySettingsOperatorRender(bpy.types.Operator):
 
         bpy.ops.render.render(animation=True)
         return {'FINISHED'}
+
+################################################################################
+# 3D View
+################################################################################
+
+# Operator
+class View3DOperatorSide(bpy.types.Operator):
+    """Translate the view using mouse events"""
+    bl_idname = "view3d.view3d_side"
+    bl_label = "Turn to Side View"
+
+    offset = FloatVectorProperty(name="Offset", size=3)
+
+    def execute(self, context):
+        v3d = context.space_data
+        rv3d = v3d.region_3d
+
+        rv3d.view_rotation.rotate(Euler((0, 0, self.angle)))
+        # rv3d.view_location = self._initial_location + Vector(self.offset)
+
+    def modal(self, context, event):
+        v3d = context.space_data
+        rv3d = v3d.region_3d
+
+        if event.type == 'MOUSEMOVE':
+            self.angle = (self._pre_mouse[0] - event.mouse_x) * 0.002
+            self.execute(context)
+            self._pre_mouse = Vector((event.mouse_x, event.mouse_y, 0.0))
+            # context.area.header_text_set("Offset %.4f %.4f %.4f" % tuple(self.offset))
+
+        elif event.type == 'LEFTMOUSE':
+            # context.area.header_text_set()
+            return {'FINISHED'}
+
+        # elif event.type in {'RIGHTMOUSE', 'ESC'}:
+        #     rv3d.view_location = self._initial_location
+        #     context.area.header_text_set()
+        #     return {'CANCELLED'}
+
+        return {'RUNNING_MODAL'}
+
+    def invoke(self, context, event):
+
+        if context.space_data.type == 'VIEW_3D':
+            v3d = context.space_data
+            rv3d = v3d.region_3d
+
+            if rv3d.view_perspective == 'CAMERA':
+                rv3d.view_perspective = 'PERSP'
+
+            self._pre_mouse = Vector((event.mouse_x, event.mouse_y, 0.0))
+            self._initial_location = rv3d.view_location.copy()
+
+            context.window_manager.modal_handler_add(self)
+            return {'RUNNING_MODAL'}
+        else:
+            self.report({'WARNING'}, "Active space must be a View3d")
+            return {'CANCELLED'}
+
+class View3DOperatorCamera(bpy.types.Operator):
+    bl_idname = "view3d.view3d_camera"
+    bl_label = "Turn to Camera View"
+
+    def invoke(self, context, event):
+        if context.space_data.type == 'VIEW_3D':
+            v3d = context.space_data
+            rv3d = v3d.region_3d
+            if rv3d.view_perspective == 'PERSP':
+                rv3d.view_perspective = 'CAMERA'
+            return {'FINISHED'}
 
 ################################################################################
 # Construction
@@ -1331,6 +1402,9 @@ class MainUIPanel(Panel):
         row=col.row(align=True)
         row.operator('ed.undo', text='Undo', icon='BACK')
         row.operator('ed.redo', text='Redo', icon='FORWARD')
+        row=col.row(align=True)
+        row.operator('view3d.view3d_side', text='Side View', icon='EMPTY_DATA')
+        row.operator('view3d.view3d_camera', text='Camera View', icon='SCENE')
         if context.screen.is_animation_playing==True:
             col.operator("animation.preview", text="Pause", icon='PAUSE')
         else:
