@@ -522,7 +522,6 @@ class AnimationOperatorBoneDeform(bpy.types.Operator):
         context.window_manager.modal_handler_add(self)
         return {'RUNNING_MODAL'}
 
-
 class AnimationOperatorARAP(bpy.types.Operator):
     bl_idname = 'animation.animation_arap'
     bl_label = 'Animation ARAP'
@@ -798,6 +797,8 @@ class AnimationOperatorUpdate(bpy.types.Operator):
         if (strokes==None) or (len(strokes)>10):
             return {'FINISHED'}
 
+        self.frames = [context.scene.current_frame+i for i in range(context.scene.frame_block_nb)]
+
         if context.scene.enum_brushes=='FOLLOWPATH':
             try:
                 stroke = strokes[-1]
@@ -813,14 +814,21 @@ class AnimationOperatorUpdate(bpy.types.Operator):
                 fcurve_y = obj.animation_data.action.fcurves.new(data_path='location', index=1)
                 fcurve_z = obj.animation_data.action.fcurves.new(data_path='location', index=2)
 
-                i = 0
-                while int(i*2) < N:
-                    idx = int(i*2)
-                    position = stroke.points[idx].co
-                    fcurve_x.keyframe_points.insert(context.scene.current_frame+idx, position[0], {'FAST'})
-                    fcurve_y.keyframe_points.insert(context.scene.current_frame+idx, position[1], {'FAST'})
-                    fcurve_z.keyframe_points.insert(context.scene.current_frame+idx, position[2], {'FAST'})
-                    i+=1
+                if N<context.scene.frame_block_nb:
+                    for i in range(N):
+                        position = stroke.points[i].co
+                        fcurve_x.keyframe_points.insert(self.frames[i], position[0], {'FAST'})
+                        fcurve_y.keyframe_points.insert(self.frames[i], position[1], {'FAST'})
+                        fcurve_z.keyframe_points.insert(self.frames[i], position[2], {'FAST'})
+                else:
+                    float_step = N/context.scene.frame_block_nb
+                    for i in range(context.scene.frame_block_nb):
+                        idx = int(float_step*i)
+                        position = stroke.points[idx].co
+                        fcurve_x.keyframe_points.insert(self.frames[i], position[0], {'FAST'})
+                        fcurve_y.keyframe_points.insert(self.frames[i], position[1], {'FAST'})
+                        fcurve_z.keyframe_points.insert(self.frames[i], position[2], {'FAST'})
+
 
         elif context.scene.enum_brushes=='HPOINT':
             mesh = obj.data
