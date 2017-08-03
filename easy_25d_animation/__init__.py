@@ -1329,6 +1329,7 @@ class MainUIPanel(Panel):
             col.operator('animation.preview', text='Preview', icon='RIGHTARROW')
         col.separator()
         col.prop(context.space_data, "show_floor", text="Show Floor")
+        col.prop(context.active_object, "location", text="Depth", index=1)
         col.operator('view3d.offscreen_draw', text='Show OverView', icon='MESH_UVSPHERE')
 
 
