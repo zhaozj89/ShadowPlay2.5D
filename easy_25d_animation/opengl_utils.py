@@ -12,9 +12,9 @@ def draw_circle(cx, cy, r, ls):
         glVertex2f(x+cx, y+cy)
     glEnd()
 
-def draw_dot(cx, cy):
-    glPointSize(5.0);
+def draw_dot(cx, cy, value):
+    glPointSize(3.0);
     glBegin(GL_POINTS)
-    glColor3f(0.0, 0.0, 0.0)
+    glColor3f(value, 0.0, 0.0)
     glVertex2f(cx, cy)
     glEnd()

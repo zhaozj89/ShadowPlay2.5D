@@ -1098,15 +1098,19 @@ class OffScreenDraw(bpy.types.Operator):
         aspect_ratio = 1.0
         self._update_offscreen(context, self._offscreen)
         ncamera = len(context.scene.recording_array)
-        camera_pos = []
+        camera_trajectory = []
         objects_pos = []
         for i in range(ncamera):
-            camera_pos.append((context.scene.recording_array[i].camera_position0,context.scene.recording_array[i].camera_position1))
+            camera_trajectory.append((context.scene.recording_array[i].camera_position0,context.scene.recording_array[i].camera_position1,context.scene.recording_array[i].camera_rotation_euler))
 
         for obj in bpy.data.objects:
-            objects_pos.append((obj.location[0], obj.location[1]))
+            if obj.name!='Camera':
+                objects_pos.append((obj.location[0], obj.location[1]))
 
-        self._opengl_draw(context, self._texture, aspect_ratio, 0.1, ncamera, camera_pos, objects_pos)
+        camera_pos = bpy.data.objects['Camera'].location
+        camera_orientation = bpy.data.objects['Camera'].rotation_euler[2]
+        current_camera = (camera_pos[0],camera_pos[1],camera_orientation)
+        self._opengl_draw(context, self._texture, aspect_ratio, 0.1, ncamera, camera_trajectory, current_camera, objects_pos)
 
     @staticmethod
     def handle_add(self, context):
@@ -1153,7 +1157,7 @@ class OffScreenDraw(bpy.types.Operator):
                 )
 
     @staticmethod
-    def _opengl_draw(context, texture, aspect_ratio, scale, ncamera, camera_pos, objects_pos):
+    def _opengl_draw(context, texture, aspect_ratio, scale, ncamera, camera_trajectory, current_camera, objects_pos):
         """
         OpenGL code to draw a rectangle in the viewport
         """
@@ -1204,26 +1208,63 @@ class OffScreenDraw(bpy.types.Operator):
             glVertex2f(verco[i][0], verco[i][1])
         glEnd()
 
+        # plot grid
+        LINE_N = 20
+        for i in range(LINE_N):
+            point0 = (-1.0+2.0*i/LINE_N,-1.0)
+            point1 = (-1.0+2.0*i/LINE_N,1.0)
+            glBegin(GL_LINES)
+            glColor3f(0.0,0.0,0.0)
+            glVertex3f(point0[0],point0[1],0)
+            glVertex3f(point1[0],point1[1],0)
+            glEnd()
+
+            point0 = (-1.0,-1.0+2.0*i/LINE_N)
+            point1 = (1.0,-1.0+2.0*i/LINE_N)
+            glBegin(GL_LINES)
+            glColor3f(0.0,0.0,0.0)
+            glVertex3f(point0[0],point0[1],0)
+            glVertex3f(point1[0],point1[1],0)
+            glEnd()
+
+
         for i in range(ncamera):
             glBegin(GL_TRIANGLES)
-            glColor3f(1.0, 0.5, 0.5)
-            glVertex3f(camera_pos[i][0]/20.0, camera_pos[i][1]/20.0, 0)
-            glVertex3f(camera_pos[i][0]/20.0-0.1, camera_pos[i][1]/20.0+0.1, 0)
-            glVertex3f(camera_pos[i][0]/20.0+0.1, camera_pos[i][1]/20.0+0.1, 0)
+            glColor3f(0.3, 0.8, 0.3)
+            transform_matrix = mathutils.Matrix.Rotation(camera_trajectory[i][2], 3, 'Z')
+            translation = Vector((camera_trajectory[i][0]/20.0, camera_trajectory[i][1]/20.0, 0))
+            point0 = transform_matrix * Vector((-0.1,0.1,0)) + translation
+            point1 = transform_matrix * Vector((0.1,0.1,0)) + translation
+            glVertex3f(camera_trajectory[i][0]/20.0, camera_trajectory[i][1]/20.0, 0)
+            glVertex3f(point0[0],point0[1],0)
+            glVertex3f(point1[0],point1[1],0)
             glEnd()
 
         if ncamera>1:
             for i in range(ncamera-1):
                 glBegin(GL_LINES);
-                glColor3f(0.6, 0.5, 0.5);
+                glColor3f(0.5, 1.0, 0.5);
                 glLineWidth(0.2);
-                glVertex2f(camera_pos[i][0]/20.0, camera_pos[i][1]/20.0);
-                glVertex2f(camera_pos[i+1][0]/20.0, camera_pos[i+1][1]/20.0);
+                glVertex2f(camera_trajectory[i][0]/20.0, camera_trajectory[i][1]/20.0);
+                glVertex2f(camera_trajectory[i+1][0]/20.0, camera_trajectory[i+1][1]/20.0);
                 glEnd();
+
+        # current camera
+        glBegin(GL_TRIANGLES)
+        glColor3f(0.8, 0.3, 0.3)
+        transform_matrix = mathutils.Matrix.Rotation(current_camera[2], 3, 'Z')
+        translation = Vector((current_camera[0]/20.0, current_camera[1]/20.0, 0))
+        point0 = transform_matrix * Vector((-0.1,0.1,0)) + translation
+        point1 = transform_matrix * Vector((0.1,0.1,0)) + translation
+        glVertex3f(current_camera[0]/20.0, current_camera[1]/20.0, 0)
+        glVertex3f(point0[0],point0[1],0)
+        glVertex3f(point1[0],point1[1],0)
+        glEnd()
+        opengl_utils.draw_dot(current_camera[0]/20.0, current_camera[1]/20.0, 0.9)
 
         # OBJECTS DRAWING
         for loc in objects_pos:
-            opengl_utils.draw_dot(loc[0]/20.0, loc[1]/20.0)
+            opengl_utils.draw_dot(loc[0]/20.0, loc[1]/20.0, 0.0)
 
         # restoring settings
         # glBindTexture(GL_TEXTURE_2D, act_tex[0])
