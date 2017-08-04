@@ -59,6 +59,7 @@ from bpy.types import (Panel, Operator, PropertyGroup, UIList, Menu)
 from bpy.props import (StringProperty, BoolProperty, IntProperty, FloatProperty, EnumProperty, PointerProperty)
 from bpy_extras.view3d_utils import region_2d_to_location_3d, region_2d_to_vector_3d
 from bpy.props import FloatVectorProperty
+from bpy.app.handlers import persistent
 
 # depends on sklean
 import numpy as np
@@ -66,6 +67,15 @@ import random
 import copy
 from numpy import linalg as LA
 from sklearn.decomposition import PCA
+
+################################################################################
+# Handlers
+################################################################################
+@persistent
+def cursor_handler(dummy):
+    cam = bpy.data.objects['Camera']
+    matrix_world = cam.matrix_world
+    bpy.context.scene.cursor_location = matrix_world * Vector((0,2.5,0))
 
 ################################################################################
 # Global
@@ -522,14 +532,14 @@ class AnimationOperatorBoneDeform(bpy.types.Operator):
     bl_options = {'REGISTER','UNDO'}
 
     def __init__(self):
-        print('start')
+        # print('start')
         self.counter = 0
         self.left_pressed = False
         bpy.ops.object.mode_set(mode='POSE')
 
     # potential bug, be careful about it
     def __del__(self):
-        print('delete')
+        # print('delete')
         # bpy.ops.object.mode_set(mode='OBJECT')
 
     @classmethod
@@ -1058,7 +1068,6 @@ class RecordingOperatorListActionAdd(bpy.types.Operator):
         camera_fcurve_x.keyframe_points.insert(context.scene.current_frame, position[0], {'FAST'})
         camera_fcurve_y.keyframe_points.insert(context.scene.current_frame, position[1], {'FAST'})
         camera_fcurve_rotation.keyframe_points.insert(context.scene.current_frame, obj.rotation_euler[2], {'FAST'})
-        print("I am here")
 
         item.start_frame = context.scene.current_frame
         item.end_frame = context.scene.current_frame+context.scene.frame_block_nb-1
@@ -1496,6 +1505,8 @@ def register():
     bpy.types.Scene.recording_array = bpy.props.CollectionProperty(type=RecordingPropertyItem)
     bpy.types.Scene.recording_index = bpy.props.IntProperty()
 
+    bpy.app.handlers.scene_update_post.append(cursor_handler)
+
 def unregister():
     bpy.utils.unregister_module(__name__)
 
@@ -1515,6 +1526,8 @@ def unregister():
     # Recording
     del bpy.types.Scene.recording_array
     del bpy.types.Scene.recording_index
+
+    bpy.app.handlers.scene_update_post.remove(cursor_handler)
 
 if __name__ == "__main__" :
     register()
