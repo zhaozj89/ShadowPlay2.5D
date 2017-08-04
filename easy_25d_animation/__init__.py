@@ -1044,9 +1044,11 @@ class RecordingOperatorListActionAdd(bpy.types.Operator):
             obj.animation_data.action = bpy.data.actions.new(name='LocationAnimation')
             camera_fcurve_x = obj.animation_data.action.fcurves.new(data_path='location', index=0)
             camera_fcurve_y = obj.animation_data.action.fcurves.new(data_path='location', index=1)
+            camera_fcurve_rotation = obj.animation_data.action.fcurves.new(data_path='rotation_euler', index=2)
         else:
             camera_fcurve_x = obj.animation_data.action.fcurves[0]
             camera_fcurve_y = obj.animation_data.action.fcurves[1]
+            camera_fcurve_rotation = obj.animation_data.action.fcurves[2]
 
         position = obj.location
         item.camera_position0 = position[0]
@@ -1055,6 +1057,8 @@ class RecordingOperatorListActionAdd(bpy.types.Operator):
 
         camera_fcurve_x.keyframe_points.insert(context.scene.current_frame, position[0], {'FAST'})
         camera_fcurve_y.keyframe_points.insert(context.scene.current_frame, position[1], {'FAST'})
+        camera_fcurve_rotation.keyframe_points.insert(context.scene.current_frame, obj.rotation_euler[2], {'FAST'})
+        print("I am here")
 
         item.start_frame = context.scene.current_frame
         item.end_frame = context.scene.current_frame+context.scene.frame_block_nb-1
