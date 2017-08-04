@@ -1280,51 +1280,14 @@ class OffScreenDraw(bpy.types.Operator):
             context.area.tag_redraw()
 
 ################################################################################
-# Camera
-################################################################################
-
-# UI
-class CameraUIPanel(Panel):
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'TOOLS'
-
-    bl_idname = 'OBJECT_PT_camera_path'
-    bl_label = 'Camera Path'
-    bl_category = 'Play2.5D'
-
-    def draw(self, context):
-        layout = self.layout
-        camera = context.scene.objects['Camera']
-        assert(camera!=None)
-
-        box = layout.box()
-        box.prop(camera, 'location', text='LF/RT', index=0)
-        box.prop(camera, 'location', text='FWD/BWD', index=1)
-        box.prop(camera, 'rotation_euler', text='Rotation', index=2)
-        box.separator()
-        box.operator('camera.setting', text='Set', icon='RENDER_STILL')
-
-# Operator
-class CameraOperatorSetting(bpy.types.Operator):
-    bl_idname = 'camera.setting'
-    bl_label = 'Camera Setting'
-    bl_options = {'REGISTER','UNDO'}
-
-    def invoke(self, context, event):
-        context.scene.cursor_location.x = context.scene.objects['Camera'].location.x
-        context.scene.cursor_location.y = context.scene.objects['Camera'].location.y+2.5
-        return {'FINISHED'}
-
-################################################################################
 # Main UI:
 ################################################################################
-
-class MainUIPanel(Panel):
+class AnimationUIPanel(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'TOOLS'
 
     bl_idname = 'OBJECT_PT_2.5d_animation'
-    bl_label = 'Animation'
+    bl_label = 'Single View Animation'
     bl_category = 'Play2.5D'
 
     def draw(self, context):
@@ -1346,10 +1309,8 @@ class MainUIPanel(Panel):
             row.prop(context.scene, 'add_noise')
             row.prop(context.scene, 'instance_nb')
             column.separator()
-            # column.prop(context.scene, 'construction_mode', text='Mode')
             column.operator('construction.instancing', text='Instancing', icon='BOIDS')
             column.separator()
-            column.operator('layout.cleanstrokes', text='Clean Strokes', icon='MESH_CAPSULE')
 
         elif my_settings.enum_mode == 'ANIMATION_MODE':
             column = box.column()
@@ -1359,26 +1320,12 @@ class MainUIPanel(Panel):
                 column.operator('animation.animation_update', text='Update', icon='ANIM')
             elif scene.enum_brushes=='ARAP':
                 row = column.row()
-                # row.operator('gpencil.draw', text='Add CP', icon='EDIT').mode='DRAW'
                 row.operator('animation.animation_arap', text='Point Interprete and Deform', icon='OUTLINER_DATA_MESH')
                 row = column.row()
-                # row.operator('gpencil.draw', text='Add Bone', icon='BONE_DATA').mode='DRAW'
                 row.operator('animation.animation_bone', text='Bone Interprete', icon='BONE_DATA')
                 row.operator('animation.bone_deform', text='Bone Deform', icon='OUTLINER_DATA_MESH')
-                # row = column.row()
-                # row.operator('animation.add_bone', text='Add Bone', icon='BONE_DATA')
-                # row.operator('armature.extrude', text='Extrude Bone')
-                # row = column.row()
-                # row.operator('object.parent_set', text='Bind', icon='CONSTRAINT')
-                # row.operator('object.parent_set', text='Bone Deform', icon='OUTLINER_DATA_MESH')
-            column.separator()
-            column.operator('layout.cleanstrokes', text='Clean Strokes', icon='MESH_CAPSULE')
-
         elif my_settings.enum_mode == 'LIGHTING_MODE':
-            # view = context.space_data
             world = context.scene.world
-            # row = box.row()
-            # row.prop(view, 'show_world', text='Show World')
             row = box.row()
             row.prop(world, 'use_sky_paper', text='Skey Color')
             row.prop(world, 'use_sky_blend', text='Ground Color')
@@ -1386,24 +1333,11 @@ class MainUIPanel(Panel):
             row.column().prop(world, "horizon_color", text="Ground Color")
             row.column().prop(world, "zenith_color", text='Sky Color')
 
-        for i in range(3):
-            layout.split()
+        layout.split()
 
         box = layout.box()
-        box.label('Tools')
+        box.label('Sketch Tools')
         col = box.column()
-        row=col.row(align=True)
-        # if bpy.context.active_object.mode=='OBJECT':
-        #     context.scene.edit_mode=='Object'
-        # elif bpy.context.active_object.mode=='EIDT':
-        #     context.scene.edit_mode=='Edit'
-        # elif bpy.context.active_object.mode=='POSE':
-        #     context.scene.edit_mode=='Pose'
-        row.prop(context.scene, "edit_mode", text="Mode")
-        row=col.row(align=True)
-        row.operator('transform.translate', text='Translate', icon='NDOF_TRANS')
-        row.operator('transform.rotate', text='Rotate', icon='NDOF_TURN')
-        row.operator('transform.resize', text='Scale', icon='VIEWZOOM')
         row=col.row(align=True)
         row.operator('gpencil.draw', text='Draw', icon='BRUSH_DATA').mode='DRAW'
         row.operator('construction.interpret_contour', text='Interprete', icon='PARTICLE_DATA')
@@ -1413,38 +1347,69 @@ class MainUIPanel(Panel):
             row.operator('construction.on_surface', text='Surface', icon='SURFACE_NSURFACE')
         else:
             row.operator('construction.on_surface', text='Cursor', icon='LAYER_ACTIVE')
+        col = box.column()
+        col.operator('layout.cleanstrokes', text='Clean Strokes', icon='MESH_CAPSULE')
+
+        layout.split()
+
+        box = layout.box()
+        box.label('3D Tools')
+        col = box.column()
         row=col.row(align=True)
-        row.operator('object.delete', text='Delete', icon='X')
-        row.operator('mysettings.reset', text='Reset', icon='HAND')
-        row=col.row(align=True)
-        row.operator('ed.undo', text='Undo', icon='BACK')
-        row.operator('ed.redo', text='Redo', icon='FORWARD')
+        row.operator('transform.translate', text='Translate', icon='NDOF_TRANS')
+        row.operator('transform.rotate', text='Rotate', icon='NDOF_TURN')
+        row.operator('transform.resize', text='Scale', icon='VIEWZOOM')
         row=col.row(align=True)
         row.operator('view3d.view3d_side', text='Side View', icon='EMPTY_DATA')
         row.operator('view3d.view3d_camera', text='Camera View', icon='SCENE')
-        if context.screen.is_animation_playing==True:
-            col.operator("animation.preview", text="Pause", icon='PAUSE')
-        else:
-            col.operator('animation.preview', text='Preview', icon='RIGHTARROW')
-        col.separator()
+        col.operator('view3d.offscreen_draw', text='Show OverView', icon='MESH_UVSPHERE')
         col.prop(context.space_data, "show_floor", text="Show Floor")
         col.prop(context.active_object, "location", text="Depth", index=1)
-        col.operator('view3d.offscreen_draw', text='Show OverView', icon='MESH_UVSPHERE')
 
-
-        for i in range(3):
-            layout.split()
+        layout.split()
 
         box = layout.box()
-        box.label('Record')
-        row = box.row()
-        col = row.column()
-        col.template_list('RecordingUIListItem', '', scene, 'recording_array', scene, 'recording_index', rows=2)
+        box.label('View Tools')
+        # row=col.row(align=True)
+        # row.prop(context.scene, "edit_mode", text="Mode")
+        row=box.row(align=True)
+        row.operator('object.delete', text='Delete', icon='X')
+        row.operator('mysettings.reset', text='Reset', icon='HAND')
+        row=box.row(align=True)
+        row.operator('ed.undo', text='Undo', icon='BACK')
+        row.operator('ed.redo', text='Redo', icon='FORWARD')
+        if context.screen.is_animation_playing==True:
+            box.operator("animation.preview", text="Pause", icon='PAUSE')
+        else:
+            box.operator('animation.preview', text='Preview', icon='RIGHTARROW')
 
-        col = box.column()
-        col.operator('recording.add', icon='ZOOMIN', text='Add')
-        col.separator()
-        col.operator('recording.edit', icon='SEQ_SEQUENCER', text='Edit')
+################################################################################
+# Camera UI
+################################################################################
+class CameraUIPanel(Panel):
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'TOOLS'
+
+    bl_idname = 'OBJECT_PT_camera_path'
+    bl_label = 'Camera Path for Multi-View'
+    bl_category = 'Play2.5D'
+
+    def draw(self, context):
+        layout = self.layout
+        camera = context.scene.objects['Camera']
+
+        box = layout.box()
+        box.prop(camera, 'location', text='LF/RT', index=0)
+        box.prop(camera, 'location', text='FWD/BWD', index=1)
+        box.prop(camera, 'rotation_euler', text='Rotation', index=2)
+
+        box.label('Recording')
+        row = box.row(align=True)
+        col = row.column()
+        col.template_list('RecordingUIListItem', '', context.scene, 'recording_array', context.scene, 'recording_index', rows=2)
+        row = box.row(align=True)
+        row.operator('recording.add', icon='ZOOMIN', text='Add')
+        row.operator('recording.edit', icon='SEQ_SEQUENCER', text='Edit')
 
 class RenderingUIPanel(Panel):
     bl_space_type = 'VIEW_3D'

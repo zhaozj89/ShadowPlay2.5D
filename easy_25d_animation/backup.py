@@ -1,3 +1,15 @@
+            # column.prop(context.scene, 'construction_mode', text='Mode')
+# # Operator
+# class CameraOperatorSetting(bpy.types.Operator):
+#     bl_idname = 'camera.setting'
+#     bl_label = 'Camera Setting'
+#     bl_options = {'REGISTER','UNDO'}
+#
+#     def invoke(self, context, event):
+#         context.scene.cursor_location.x = context.scene.objects['Camera'].location.x
+#         context.scene.cursor_location.y = context.scene.objects['Camera'].location.y+2.5
+#         return {'FINISHED'}
+
 # class DirectionPieMenu(Menu):
 #     bl_idname = 'OBJECT_MT_direction_pie_menu'
 #     bl_label = "Select Direction"
@@ -35,8 +47,23 @@
 #
 #
 
+            # row = box.row()
+            # row.prop(view, 'show_world', text='Show World')
 
 
+
+                        # view = context.space_data
+
+                                        # row = column.row()
+                                        # row.operator('animation.add_bone', text='Add Bone', icon='BONE_DATA')
+                                        # row.operator('armature.extrude', text='Extrude Bone')
+                                        # row = column.row()
+                                        # row.operator('object.parent_set', text='Bind', icon='CONSTRAINT')
+                                        # row.operator('object.parent_set', text='Bone Deform', icon='OUTLINER_DATA_MESH')
+
+                                                        # row.operator('gpencil.draw', text='Add Bone', icon='BONE_DATA').mode='DRAW'
+
+                # row.operator('gpencil.draw', text='Add CP', icon='EDIT').mode='DRAW'
 
 # class Stroke2Mesh(bpy.types.Operator):
 #     bl_idname = 'gpencil.stroke2mesh'
@@ -750,3 +777,11 @@
                         #     count += self.testA_list[i][vert.index]*q_hat
                         # vco_new = count + q_star[vert.index]
                         # print(vco_new)
+
+
+        # if bpy.context.active_object.mode=='OBJECT':
+        #     context.scene.edit_mode=='Object'
+        # elif bpy.context.active_object.mode=='EIDT':
+        #     context.scene.edit_mode=='Edit'
+        # elif bpy.context.active_object.mode=='POSE':
+        #     context.scene.edit_mode=='Pose'
