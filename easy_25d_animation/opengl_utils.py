@@ -15,6 +15,6 @@ def draw_circle(cx, cy, r, ls):
 def draw_dot(cx, cy, value):
     glPointSize(3.0);
     glBegin(GL_POINTS)
-    glColor3f(value, 0.0, 0.0)
+    glColor3f(value, 0.0, 1.0)
     glVertex2f(cx, cy)
     glEnd()

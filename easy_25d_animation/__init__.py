@@ -1209,7 +1209,7 @@ class OffScreenDraw(bpy.types.Operator):
         glEnd()
 
         # plot grid
-        LINE_N = 20
+        LINE_N = 10
         for i in range(LINE_N):
             point0 = (-1.0+2.0*i/LINE_N,-1.0)
             point1 = (-1.0+2.0*i/LINE_N,1.0)
