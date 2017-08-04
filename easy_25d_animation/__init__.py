@@ -88,10 +88,10 @@ def cursor_handler(dummy):
 class MySettingsProperty(PropertyGroup):
     enum_mode = EnumProperty(name='Mode',
                              description='Different drawing mode',
-                             items=[('LIGHTING_MODE','Lighting',''),
+                             items=[('IMPORT_MODE','Import',''),
+                                    ('MODELING_MODE','Modeling',''),
                                     ('ANIMATION_MODE','Animation',''),
-                                    ('CONSTRUCTING_MODE','Construction',''),
-                                    ('IMPORT_MODE','Import','')],
+                                    ('LIGHTING_MODE','Lighting','')],
                              default='IMPORT_MODE')
 
 class MySettingsOperatorReset(bpy.types.Operator):
@@ -141,9 +141,9 @@ class View3DOperatorSide(bpy.types.Operator):
         rv3d = v3d.region_3d
 
         if event.type == 'MOUSEMOVE':
-            self.angle = (self._pre_mouse[0] - event.mouse_x) * 0.002
+            self.angle = (self._pre_mouse[0] - event.mouse_region_x) * 0.002
             self.execute(context)
-            self._pre_mouse = Vector((event.mouse_x, event.mouse_y, 0.0))
+            self._pre_mouse = Vector((event.mouse_region_x, event.mouse_region_y, 0.0))
             # context.area.header_text_set("Offset %.4f %.4f %.4f" % tuple(self.offset))
 
         elif event.type == 'LEFTMOUSE':
@@ -166,7 +166,7 @@ class View3DOperatorSide(bpy.types.Operator):
             if rv3d.view_perspective == 'CAMERA':
                 rv3d.view_perspective = 'PERSP'
 
-            self._pre_mouse = Vector((event.mouse_x, event.mouse_y, 0.0))
+            self._pre_mouse = Vector((event.mouse_region_x, event.mouse_region_y, 0.0))
             self._initial_location = rv3d.view_location.copy()
 
             context.window_manager.modal_handler_add(self)
@@ -188,12 +188,12 @@ class View3DOperatorCamera(bpy.types.Operator):
             return {'FINISHED'}
 
 ################################################################################
-# Construction
+# modeling
 ################################################################################
 
 # Operator
-class ConstructionOperatorInterpreteContour(bpy.types.Operator):
-    bl_idname = "construction.interpret_contour"
+class modelingOperatorInterpreteContour(bpy.types.Operator):
+    bl_idname = "modeling.interpret_contour"
     bl_label = "Interprete contour stroke"
     bl_options = {'REGISTER', 'UNDO'}
 
@@ -277,8 +277,8 @@ class ConstructionOperatorInterpreteContour(bpy.types.Operator):
 
         return {'FINISHED'}
 
-class ConstructionOperatorGenerateSurface(bpy.types.Operator):
-    bl_idname = "construction.generate_surface"
+class modelingOperatorGenerateSurface(bpy.types.Operator):
+    bl_idname = "modeling.generate_surface"
     bl_label = "Generate Surface"
     bl_options = {'REGISTER', 'UNDO'}
 
@@ -326,8 +326,8 @@ class ConstructionOperatorGenerateSurface(bpy.types.Operator):
 
         return {'FINISHED'}
 
-class ConstructionOperatorOnSurface(bpy.types.Operator):
-    bl_idname = "construction.on_surface"
+class modelingOperatorOnSurface(bpy.types.Operator):
+    bl_idname = "modeling.on_surface"
     bl_label = "Grease pencil on surface or 3D cursor"
     bl_options = {'REGISTER', 'UNDO'}
 
@@ -341,8 +341,8 @@ class ConstructionOperatorOnSurface(bpy.types.Operator):
         context.scene.on_surface = not context.scene.on_surface
         return {'FINISHED'}
 
-class ConstructionOperatorInstancing(bpy.types.Operator):
-    bl_idname = "construction.instancing"
+class modelingOperatorInstancing(bpy.types.Operator):
+    bl_idname = "modeling.instancing"
     bl_label = "Instancing"
     bl_options = {'REGISTER', 'UNDO'}
 
@@ -434,7 +434,7 @@ class ConstructionOperatorInstancing(bpy.types.Operator):
             bpy.ops.object.select_all(action='DESELECT')
         return {'FINISHED'}
 
-class ConstructionOperatorCleanStrokes(bpy.types.Operator):
+class modelingOperatorCleanStrokes(bpy.types.Operator):
     bl_idname = 'layout.cleanstrokes'
     bl_label = 'Cleaning strokes'
     bl_options = {'REGISTER','UNDO'}
@@ -1280,9 +1280,9 @@ class OffScreenDraw(bpy.types.Operator):
             context.area.tag_redraw()
 
 ################################################################################
-# Main UI:
+# UIs:
 ################################################################################
-class AnimationUIPanel(Panel):
+class SingleViewAnimationUIPanel(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'TOOLS'
 
@@ -1295,81 +1295,73 @@ class AnimationUIPanel(Panel):
         scene = context.scene
 
         box = layout.box()
-        box.label('Mode')
         my_settings = scene.my_settings
         box.prop(my_settings, 'enum_mode', text='')
 
         if my_settings.enum_mode == 'IMPORT_MODE':
-            column = box.column()
-            column.operator('import_image.to_grid', text='Import', icon='FILE_FOLDER')
+            box.operator('import_image.to_grid', text='Import', icon='FILE_FOLDER')
 
-        elif my_settings.enum_mode == 'CONSTRUCTING_MODE':
-            column = box.column()
-            row = column.row(align=True)
+        elif my_settings.enum_mode == 'MODELING_MODE':
+            row = box.row(align=True)
             row.prop(context.scene, 'add_noise')
             row.prop(context.scene, 'instance_nb')
-            column.separator()
-            column.operator('construction.instancing', text='Instancing', icon='BOIDS')
-            column.separator()
+            box.operator('modeling.instancing', text='Instancing', icon='BOIDS')
 
         elif my_settings.enum_mode == 'ANIMATION_MODE':
-            column = box.column()
-            column.prop(context.scene, 'enum_brushes', text='Brushes')
-            column.separator()
+            box.prop(context.scene, 'enum_brushes', text='Brushes')
+            box.separator()
             if (scene.enum_brushes=='FOLLOWPATH') or (scene.enum_brushes=='HPOINT'):
-                column.operator('animation.animation_update', text='Update', icon='ANIM')
+                box.operator('animation.animation_update', text='Update', icon='ANIM')
             elif scene.enum_brushes=='ARAP':
-                row = column.row()
+                row = box.row(align=True)
                 row.operator('animation.animation_arap', text='Point Interprete and Deform', icon='OUTLINER_DATA_MESH')
-                row = column.row()
+                row = box.row(align=True)
                 row.operator('animation.animation_bone', text='Bone Interprete', icon='BONE_DATA')
                 row.operator('animation.bone_deform', text='Bone Deform', icon='OUTLINER_DATA_MESH')
         elif my_settings.enum_mode == 'LIGHTING_MODE':
-            world = context.scene.world
-            row = box.row()
-            row.prop(world, 'use_sky_paper', text='Skey Color')
-            row.prop(world, 'use_sky_blend', text='Ground Color')
-            row = box.row()
-            row.column().prop(world, "horizon_color", text="Ground Color")
-            row.column().prop(world, "zenith_color", text='Sky Color')
+            row = box.row(align=True)
+            row.prop(context.scene.world, 'use_sky_paper', text='Background Color')
+            # row.prop(world, 'use_sky_blend', text='Ground Color')
+            # row = box.row()
+            row.prop(context.scene.world, "horizon_color", text="Ground Color")
+            # row.column().prop(world, "zenith_color", text='Sky Color')
 
         layout.split()
 
         box = layout.box()
         box.label('Sketch Tools')
-        col = box.column()
-        row=col.row(align=True)
+        row=box.row(align=True)
         row.operator('gpencil.draw', text='Draw', icon='BRUSH_DATA').mode='DRAW'
-        row.operator('construction.interpret_contour', text='Interprete', icon='PARTICLE_DATA')
-        row=col.row(align=True)
-        row.operator('construction.generate_surface', text='Generate Surface')
+        row.operator('gpencil.draw', text='Draw', icon='FORCE_CURVE').mode='ERASER'
+        row=box.row(align=True)
+        row.operator('modeling.interpret_contour', text='Interprete', icon='PARTICLE_DATA')
+        row.operator('modeling.generate_surface', text='Generate Surface')
+        row=box.row(align=True)
         if context.scene.on_surface==True:
-            row.operator('construction.on_surface', text='Surface', icon='SURFACE_NSURFACE')
+            row.operator('modeling.on_surface', text='Surface', icon='SURFACE_NSURFACE')
         else:
-            row.operator('construction.on_surface', text='Cursor', icon='LAYER_ACTIVE')
-        col = box.column()
-        col.operator('layout.cleanstrokes', text='Clean Strokes', icon='MESH_CAPSULE')
+            row.operator('modeling.on_surface', text='Cursor', icon='LAYER_ACTIVE')
+        row.operator('layout.cleanstrokes', text='Clean Strokes', icon='MESH_CAPSULE')
 
         layout.split()
 
         box = layout.box()
         box.label('3D Tools')
-        col = box.column()
-        row=col.row(align=True)
+        box.prop(context.space_data, "show_floor", text="Show Floor")
+        row=box.row(align=True)
         row.operator('transform.translate', text='Translate', icon='NDOF_TRANS')
         row.operator('transform.rotate', text='Rotate', icon='NDOF_TURN')
         row.operator('transform.resize', text='Scale', icon='VIEWZOOM')
-        row=col.row(align=True)
+        row=box.row(align=True)
         row.operator('view3d.view3d_side', text='Side View', icon='EMPTY_DATA')
         row.operator('view3d.view3d_camera', text='Camera View', icon='SCENE')
-        col.operator('view3d.offscreen_draw', text='Show OverView', icon='MESH_UVSPHERE')
-        col.prop(context.space_data, "show_floor", text="Show Floor")
-        col.prop(context.active_object, "location", text="Depth", index=1)
+        box.operator('view3d.offscreen_draw', text='Show OverView', icon='MESH_UVSPHERE')
+        # box.prop(context.active_object, "location", text="Depth", index=1)
 
         layout.split()
 
         box = layout.box()
-        box.label('View Tools')
+        box.label('Utility Tools')
         # row=col.row(align=True)
         # row.prop(context.scene, "edit_mode", text="Mode")
         row=box.row(align=True)
@@ -1378,15 +1370,8 @@ class AnimationUIPanel(Panel):
         row=box.row(align=True)
         row.operator('ed.undo', text='Undo', icon='BACK')
         row.operator('ed.redo', text='Redo', icon='FORWARD')
-        if context.screen.is_animation_playing==True:
-            box.operator("animation.preview", text="Pause", icon='PAUSE')
-        else:
-            box.operator('animation.preview', text='Preview', icon='RIGHTARROW')
 
-################################################################################
-# Camera UI
-################################################################################
-class CameraUIPanel(Panel):
+class MultiViewCameraUIPanel(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'TOOLS'
 
@@ -1410,6 +1395,10 @@ class CameraUIPanel(Panel):
         row = box.row(align=True)
         row.operator('recording.add', icon='ZOOMIN', text='Add')
         row.operator('recording.edit', icon='SEQ_SEQUENCER', text='Edit')
+        if context.screen.is_animation_playing==True:
+            box.operator("animation.preview", text="Pause", icon='PAUSE')
+        else:
+            box.operator('animation.preview', text='Preview', icon='RIGHTARROW')
 
 class RenderingUIPanel(Panel):
     bl_space_type = 'VIEW_3D'
@@ -1431,33 +1420,33 @@ class RenderingUIPanel(Panel):
 ################################################################################
 # Logic:
 ################################################################################
-def update_mode_func(self, context):
-    mode = context.scene.edit_mode
-    if mode=='Object':
-        bpy.ops.object.mode_set(mode='OBJECT')
-    elif mode=='Edit':
-        bpy.ops.object.mode_set(mode='EDIT')
-    elif mode=='Pose':
-        bpy.ops.object.mode_set(mode='POSE')
+# def update_mode_func(self, context):
+#     mode = context.scene.edit_mode
+#     if mode=='Object':
+#         bpy.ops.object.mode_set(mode='OBJECT')
+#     elif mode=='Edit':
+#         bpy.ops.object.mode_set(mode='EDIT')
+#     elif mode=='Pose':
+#         bpy.ops.object.mode_set(mode='POSE')
 
 def register():
     bpy.utils.register_module(__name__)
 
     bpy.types.Scene.my_settings = PointerProperty(type=MySettingsProperty)
 
-    bpy.types.Scene.edit_mode = bpy.props.EnumProperty(name='Edit Mode',
-                                                    description='Different Modes',
-                                                    items=[('','',''),
-                                                           ('Object','Object',''),
-                                                           ('Edit','Edit',''),
-                                                           ('Pose','Pose','')],
-                                                    default='', update=update_mode_func)
+    # bpy.types.Scene.edit_mode = bpy.props.EnumProperty(name='Edit Mode',
+    #                                                 description='Different Modes',
+    #                                                 items=[('','',''),
+    #                                                        ('Object','Object',''),
+    #                                                        ('Edit','Edit',''),
+    #                                                        ('Pose','Pose','')],
+    #                                                 default='', update=update_mode_func)
 
-    # Construction
+    # modeling
     bpy.types.Scene.on_surface = bpy.props.BoolProperty(name='on_surface', default=False)
     bpy.types.Scene.add_noise = bpy.props.BoolProperty(name='Add Noise', default=False)
     bpy.types.Scene.instance_nb = bpy.props.IntProperty(name='#', default=6)
-    bpy.types.Scene.plane_construction_smalldepth = bpy.props.FloatProperty(name='small_depth', default=0.0)
+    bpy.types.Scene.plane_modeling_smalldepth = bpy.props.FloatProperty(name='small_depth', default=0.0)
 
     # Animation
     bpy.types.Scene.enum_brushes = bpy.props.EnumProperty(name='Brushes',
@@ -1481,11 +1470,11 @@ def unregister():
 
     del bpy.types.Scene.my_settings
 
-    # Construction
+    # modeling
     del bpy.types.Scene.on_surface
     del bpy.types.Scene.add_noise
     del bpy.types.Scene.instance_nb
-    del bpy.types.Scene.plane_construction_smalldepth
+    del bpy.types.Scene.plane_modeling_smalldepth
 
     # Animation
     del bpy.types.Scene.enum_brushes
