@@ -357,9 +357,11 @@ class IMPORT_OT_image_to_grid(Operator, AddObjectHelper):
         from mathutils import Vector
         from math import radians
 
+        angle = bpy.data.objects['Camera'].rotation_euler[2]
+        # print(angle)
         for plane in planes:
             plane.location = context.scene.cursor_location
-            plane.rotation_euler = (radians(90), 0, 0)
+            plane.rotation_euler = (radians(90), 0, angle)
 
         context.scene.update()
         if self.align:

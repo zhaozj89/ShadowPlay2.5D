@@ -77,7 +77,7 @@ def cursor_handler(dummy):
     matrix_world = cam.matrix_world
     angle = cam.rotation_euler[2]
     # print(angle)
-    location = matrix_world * ( mathutils.Matrix.Rotation(math.radians(angle), 4, 'Z') * mathutils.Matrix.Rotation(math.radians(-90), 4, 'X') * Vector((0,2.5,0,1)) )
+    location = matrix_world * ( mathutils.Matrix.Rotation(angle, 4, 'Z') * mathutils.Matrix.Rotation(math.radians(-90), 4, 'X') * Vector((0,2.5,0,1)) )
     # print(location)
     bpy.context.scene.cursor_location = location.xyz
 
