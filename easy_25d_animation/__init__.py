@@ -75,7 +75,11 @@ from sklearn.decomposition import PCA
 def cursor_handler(dummy):
     cam = bpy.data.objects['Camera']
     matrix_world = cam.matrix_world
-    bpy.context.scene.cursor_location = matrix_world * Vector((0,2.5,0))
+    angle = cam.rotation_euler[2]
+    # print(angle)
+    location = matrix_world * ( mathutils.Matrix.Rotation(math.radians(angle), 4, 'Z') * mathutils.Matrix.Rotation(math.radians(-90), 4, 'X') * Vector((0,2.5,0,1)) )
+    # print(location)
+    bpy.context.scene.cursor_location = location.xyz
 
 ################################################################################
 # Global
@@ -537,10 +541,10 @@ class AnimationOperatorBoneDeform(bpy.types.Operator):
         self.left_pressed = False
         bpy.ops.object.mode_set(mode='POSE')
 
-    # potential bug, be careful about it
-    def __del__(self):
-        # print('delete')
-        bpy.ops.object.mode_set(mode='OBJECT')
+    # # potential bug, be careful about it
+    # def __del__(self):
+    #     # print('delete')
+    #     bpy.ops.object.mode_set(mode='OBJECT')
 
     @classmethod
     def poll(cls, context):
@@ -609,14 +613,14 @@ class AnimationOperatorARAP(bpy.types.Operator):
     bl_options = {'REGISTER','UNDO'}
 
     def __init__(self):
-        print("Start Invoke")
+        # print("Start Invoke")
         self.cp_before = []
         self.cp_after = []
         self.seleted_cp = [None]
         self.leftmouse_pressed = False
 
-    def __del__(self):
-        print("End Invoke")
+    # def __del__(self):
+    #     print("End Invoke")
 
     @classmethod
     def poll(cls, context):
