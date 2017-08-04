@@ -540,7 +540,7 @@ class AnimationOperatorBoneDeform(bpy.types.Operator):
     # potential bug, be careful about it
     def __del__(self):
         # print('delete')
-        # bpy.ops.object.mode_set(mode='OBJECT')
+        bpy.ops.object.mode_set(mode='OBJECT')
 
     @classmethod
     def poll(cls, context):
