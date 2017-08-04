@@ -76,9 +76,7 @@ def cursor_handler(dummy):
     cam = bpy.data.objects['Camera']
     matrix_world = cam.matrix_world
     angle = cam.rotation_euler[2]
-    # print(angle)
     location = matrix_world * ( mathutils.Matrix.Rotation(angle, 4, 'Z') * mathutils.Matrix.Rotation(math.radians(-90), 4, 'X') * Vector((0,2.5,0,1)) )
-    # print(location)
     bpy.context.scene.cursor_location = location.xyz
 
 ################################################################################
@@ -530,6 +528,7 @@ class AnimationOperatorBone(bpy.types.Operator):
             strokes.remove(stroke)
         return {'FINISHED'}
 
+# https://blender.stackexchange.com/questions/7598/rotation-around-the-cursor-with-low-level-python-no-bpy-ops/7603#7603
 class AnimationOperatorBoneDeform(bpy.types.Operator):
     bl_idname = 'animation.bone_deform'
     bl_label = 'Animation Bone Deform'
@@ -574,8 +573,7 @@ class AnimationOperatorBoneDeform(bpy.types.Operator):
             x, y = event.mouse_region_x, event.mouse_region_y
             loc = region_2d_to_location_3d(context.region, context.space_data.region_3d, (x, y), bpy.context.scene.cursor_location)
 
-            self.bone.rotation_mode = 'XYZ'
-            axis = 'Z'
+            self.bone.rotation_mode = 'QUATERNION'
             vec1 = loc - self.bone.head
             vec2 = self.pre_loc - self.bone.head
 
@@ -586,14 +584,24 @@ class AnimationOperatorBoneDeform(bpy.types.Operator):
             v1 = np.cross(np.array(vec1), np.array(vec2))
 
             sign = np.dot(v1, vec3)
-            if sign<0:
+            if sign>0:
                 angle = -angle
 
-            self.bone.rotation_euler.rotate_axis(axis, angle)
+            cursor_location = bpy.context.scene.cursor_location
+            cam = bpy.data.objects['Camera']
+            axis = (cursor_location - cam.location).normalized()
+            quat = mathutils.Quaternion(axis, angle)
+
+            cursor_loc = bpy.context.scene.cursor_location
+            mat = (Matrix.Translation(cursor_loc) *
+                   quat.to_matrix().to_4x4() *
+                   Matrix.Translation(-cursor_loc))
+
+            self.bone.matrix = mat * self.bone.matrix
 
             self.pre_loc = loc
 
-            self.bone.keyframe_insert(data_path="rotation_euler" ,frame=self.frames[self.counter])
+            self.bone.keyframe_insert(data_path="rotation_quaternion",frame=self.frames[self.counter])
 
             if self.counter < context.scene.frame_block_nb-1:
                 self.counter+=1
