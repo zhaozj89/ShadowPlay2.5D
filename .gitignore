@@ -1,3 +1,5 @@
 *.pyc
 __pycache__/
 __pycache__/*
+__pycache__/*.pyc
+easy_25d__animation/__pycache__/*.pyc
