@@ -1163,7 +1163,7 @@ class OffScreenDraw(bpy.types.Operator):
         """
 
         glDisable(GL_DEPTH_TEST)
-        glClearColor(1.0, 1.0, 1.0, 1.0);
+        glClearColor(1.0, 1.0, 1.0, 1.0)
 
         # view setup
         glMatrixMode(GL_PROJECTION)
@@ -1200,7 +1200,7 @@ class OffScreenDraw(bpy.types.Operator):
 
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
 
-        glColor4f(1.0, 1.0, 1.0, 1.0)
+        glColor4f(0.8, 0.8, 0.8, 1.0)
 
         glBegin(GL_QUADS)
         for i in range(4):
