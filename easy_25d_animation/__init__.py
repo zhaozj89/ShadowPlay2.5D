@@ -25,7 +25,7 @@ bl_info = {
     "version": (0, 1),
     "blender": (2, 78, 0),
     "location": "3D View",
-    "description": "Sketch-based 2.5D Animation Tools",
+    "description": "Sketch-based 2.5D Animation Tools (depends on io_import_images_as_meshes.py)",
     "wiki_url": "http://hci.cse.ust.hk/index.html",
     "support": "TESTING",
     "category": "Animation",
@@ -34,15 +34,12 @@ bl_info = {
 
 if "bpy" in locals():
     import importlib
-    importlib.reload(opengl_utils)
-#     importlib.reload(utils)
-#     importlib.reload(ui_utils)
-#     importlib.reload(ops_utils)
-#     importlib.reload(mesh)
-#     importlib.reload(brushes)
+    importlib.reload(view3d_ops)
+    importlib.reload(modeling_ops)
+    importlib.reload(sketch_ops)
+    importlib.reload(subview_ops)
 else:
-    from . import opengl_utils
-#     from . import utils, ui_utils, ops_utils, mesh, brushes
+    from . import view3d_ops, modeling_ops, sketch_ops, subview_ops
 
 import os
 import sys
@@ -116,343 +113,8 @@ class MySettingsOperatorRender(bpy.types.Operator):
         return {'FINISHED'}
 
 ################################################################################
-# 3D View
-################################################################################
-
-# Operator
-class View3DOperatorSide(bpy.types.Operator):
-    """Translate the view using mouse events"""
-    bl_idname = "view3d.view3d_side"
-    bl_label = "Turn to Side View"
-
-    offset = FloatVectorProperty(name="Offset", size=3)
-
-    def execute(self, context):
-        v3d = context.space_data
-        rv3d = v3d.region_3d
-
-        rv3d.view_rotation.rotate(Euler((0, 0, self.angle)))
-        # rv3d.view_location = self._initial_location + Vector(self.offset)
-
-    def modal(self, context, event):
-        v3d = context.space_data
-        rv3d = v3d.region_3d
-
-        if event.type == 'MOUSEMOVE':
-            self.angle = (self._pre_mouse[0] - event.mouse_region_x) * 0.002
-            self.execute(context)
-            self._pre_mouse = Vector((event.mouse_region_x, event.mouse_region_y, 0.0))
-            # context.area.header_text_set("Offset %.4f %.4f %.4f" % tuple(self.offset))
-
-        elif event.type == 'LEFTMOUSE':
-            # context.area.header_text_set()
-            return {'FINISHED'}
-
-        # elif event.type in {'RIGHTMOUSE', 'ESC'}:
-        #     rv3d.view_location = self._initial_location
-        #     context.area.header_text_set()
-        #     return {'CANCELLED'}
-
-        return {'RUNNING_MODAL'}
-
-    def invoke(self, context, event):
-
-        if context.space_data.type == 'VIEW_3D':
-            v3d = context.space_data
-            rv3d = v3d.region_3d
-
-            if rv3d.view_perspective == 'CAMERA':
-                rv3d.view_perspective = 'PERSP'
-
-            self._pre_mouse = Vector((event.mouse_region_x, event.mouse_region_y, 0.0))
-            self._initial_location = rv3d.view_location.copy()
-
-            context.window_manager.modal_handler_add(self)
-            return {'RUNNING_MODAL'}
-        else:
-            self.report({'WARNING'}, "Active space must be a View3d")
-            return {'CANCELLED'}
-
-class View3DOperatorCamera(bpy.types.Operator):
-    bl_idname = "view3d.view3d_camera"
-    bl_label = "Turn to Camera View"
-
-    def invoke(self, context, event):
-        if context.space_data.type == 'VIEW_3D':
-            v3d = context.space_data
-            rv3d = v3d.region_3d
-            if rv3d.view_perspective == 'PERSP':
-                rv3d.view_perspective = 'CAMERA'
-            return {'FINISHED'}
-
-################################################################################
-# modeling
-################################################################################
-
-# Operator
-class ModelingOperatorInterpreteContour(bpy.types.Operator):
-    bl_idname = "modeling.interpret_contour"
-    bl_label = "Interprete contour stroke"
-    bl_options = {'REGISTER', 'UNDO'}
-
-    @classmethod
-    def poll(cls, context):
-        return (context.scene.grease_pencil!=None)
-
-    def invoke(self, context, event):
-        gp = context.scene.grease_pencil
-
-        obj = context.active_object
-        ly = gp.layers.active
-        if ly==None:
-            return {'FINISHED'}
-        af = ly.active_frame
-        if af==None:
-            return {'FINISHED'}
-        strokes = af.strokes
-        if (strokes==None) or (len(strokes)<1):
-            return {'FINISHED'}
-
-        contour_stroke = strokes[-1]
-
-        camera = context.scene.camera
-        if camera==None:
-            return {'FINISHED'}
-
-        render = context.scene.render
-        modelview_matrix = camera.matrix_world.inverted()
-        projection_matrix = camera.calc_matrix_camera(render.resolution_x,render.resolution_y,render.pixel_aspect_x,render.pixel_aspect_y)
-
-        M = projection_matrix*modelview_matrix
-
-        points_image = []
-        np_M = np.array(M)
-        for point in contour_stroke.points:
-            co = list(point.co)
-            co.append(1.0)
-            co = np.array(co)
-            res = np.dot(np_M, co)
-            res /= res[3]
-            points_image.append(res)
-
-        if gp.palettes:
-            gp_palette = gp.palettes.active
-        else:
-            gp_palette = gp.palettes.new('mypalette')
-
-        if 'black' in gp_palette.colors:
-            black_col = gp_palette.colors['black']
-        else:
-            black_col = gp_palette.colors.new()
-            black_col.name = 'black'
-            black_col.color = (0.0,0.0,0.0)
-
-        M.invert()
-        np_M = np.array(M)
-        res_points = []
-        for i, point in enumerate(points_image):
-            first = np.dot(np_M[:,0:2], point[0:2]) + np_M[:,3]
-            second = np_M[:,2]
-            d = -first[2]/second[2]
-            res = first + d*second
-            res /= res[3]
-            res_points.append(res[0:3])
-
-        points_nb = min(10, len(res_points))
-
-        strokes.remove(contour_stroke)
-        stroke = af.strokes.new(colorname=black_col.name)
-        stroke.draw_mode = '3DSPACE'
-        stroke.line_width = 6
-        stroke.points.add(count = points_nb)
-
-        if len(res_points)<points_nb:
-            for idx in range(points_nb):
-                stroke.points[idx].co = res_points[idx]
-        else:
-            for idx in range(points_nb):
-                stroke.points[idx].co = res_points[idx*int(len(res_points)/points_nb)]
-
-        return {'FINISHED'}
-
-class ModelingOperatorGenerateSurface(bpy.types.Operator):
-    bl_idname = "modeling.generate_surface"
-    bl_label = "Generate Surface"
-    bl_options = {'REGISTER', 'UNDO'}
-
-    @classmethod
-    def poll(cls, context):
-        return (context.scene.grease_pencil!=None)
-
-    def invoke(self, context, event):
-        gp = context.scene.grease_pencil
-
-        obj = context.active_object
-        ly = gp.layers.active
-        if ly==None:
-            return {'FINISHED'}
-        af = ly.active_frame
-        if af==None:
-            return {'FINISHED'}
-        strokes = af.strokes
-        if (strokes==None) or (len(strokes)<1):
-            return {'FINISHED'}
-
-        contour_stroke = strokes[-1]
-        contour_stroke.select = True
-        bpy.ops.gpencil.convert(type='PATH')
-        strokes.remove(contour_stroke)
-        objs = bpy.data.objects
-
-        select_obj = None
-        for obj in objs:
-            if obj.name[0:8]=='GP_Layer':
-                select_obj = obj
-                break
-
-        if select_obj==None:
-            return {'FINISHED'}
-
-        bpy.context.scene.objects.active = select_obj
-        bpy.ops.object.mode_set(mode='OBJECT')
-        bpy.ops.object.convert(target='MESH')
-
-        bpy.ops.object.mode_set(mode='EDIT')
-        bpy.ops.mesh.select_all(action='TOGGLE')
-
-        bpy.ops.view3d.edit_mesh_extrude_move_normal()
-
-        return {'FINISHED'}
-
-class ModelingOperatorOnSurface(bpy.types.Operator):
-    bl_idname = "modeling.on_surface"
-    bl_label = "Grease pencil on surface or 3D cursor"
-    bl_options = {'REGISTER', 'UNDO'}
-
-    def invoke(self, context, event):
-        bpy.ops.object.mode_set(mode='OBJECT')
-        if context.scene.on_surface==True:
-            context.scene.tool_settings.gpencil_stroke_placement_view3d='CURSOR'
-        else:
-            context.scene.tool_settings.gpencil_stroke_placement_view3d='SURFACE'
-
-        context.scene.on_surface = not context.scene.on_surface
-        return {'FINISHED'}
-
-class ModelingOperatorInstancing(bpy.types.Operator):
-    bl_idname = "modeling.instancing"
-    bl_label = "Instancing"
-    bl_options = {'REGISTER', 'UNDO'}
-
-    @classmethod
-    def poll(cls, context):
-        return (context.scene.grease_pencil!=None) and (context.active_object!=None)
-
-    def invoke(self, context, event):
-        gp = context.scene.grease_pencil
-
-        ly = gp.layers.active
-        if ly==None:
-            return {'FINISHED'}
-        af = ly.active_frame
-        if af==None:
-            return {'FINISHED'}
-        strokes = af.strokes
-
-        try:
-            stroke = strokes[-1]
-        except IndexError:
-            pass
-        else:
-            verts = []
-            points = stroke.points
-            for i in range(len(stroke.points)):
-                verts.append(points[i].co)
-
-            sampling_nb = min(context.scene.instance_nb, len(verts))
-            sampling_step = len(verts)/sampling_nb
-
-            shift = []
-            for i in range(sampling_nb):
-                idx = int(i*sampling_step)
-                if idx<len(verts):
-                    x = verts[idx].x
-                    y = verts[idx].y
-                    z = verts[idx].z
-                    shift.append((x,y,z))
-
-            model_obj = context.active_object
-
-            for i in range(sampling_nb):
-                new_obj = model_obj.copy()
-                if (model_obj.animation_data!=None) and (model_obj.animation_data.action!=None):
-                    model_fcurve_x = model_obj.animation_data.action.fcurves[0]
-                    model_fcurve_y = model_obj.animation_data.action.fcurves[1]
-                    model_fcurve_z = model_obj.animation_data.action.fcurves[2]
-                    N = len(model_fcurve_x.keyframe_points)
-
-                    new_obj.animation_data_create()
-                    new_obj.animation_data.action = bpy.data.actions.new(name="LocationAnimation")
-
-                    fcurve_x = new_obj.animation_data.action.fcurves.new(data_path='location', index=0)
-                    fcurve_y = new_obj.animation_data.action.fcurves.new(data_path='location', index=1)
-                    fcurve_z = new_obj.animation_data.action.fcurves.new(data_path='location', index=2)
-
-                    x_pre = 0
-                    z_pre = 0
-
-                    for k in range(N):
-                        frame_idx = model_fcurve_x.keyframe_points[k].co[0]
-                        if k==0:
-                            x_cur = shift[i][0]
-                            y_cur = shift[i][1]
-                            z_cur = shift[i][2]
-                        else:
-                            x_cur = model_fcurve_x.keyframe_points[k].co[1]+x_pre2-x_pre
-                            y_cur = model_fcurve_y.keyframe_points[k].co[1]+y_pre2-y_pre
-                            z_cur = model_fcurve_z.keyframe_points[k].co[1]+z_pre2-z_pre
-
-                        fcurve_x.keyframe_points.insert(frame_idx, x_cur+random.gauss(0, 0.05), {'FAST'})
-                        fcurve_y.keyframe_points.insert(frame_idx, y_cur+random.gauss(0, 0.05), {'FAST'})
-                        fcurve_z.keyframe_points.insert(frame_idx, z_cur+random.gauss(0, 0.05), {'FAST'})
-
-                        x_pre = model_fcurve_x.keyframe_points[k].co[1]
-                        y_pre = model_fcurve_y.keyframe_points[k].co[1]
-                        z_pre = model_fcurve_z.keyframe_points[k].co[1]
-
-                        x_pre2 = x_cur
-                        y_pre2 = y_cur
-                        z_pre2 = z_cur
-                else:
-                    new_obj.location[0] = shift[i][0]
-                    new_obj.location[1] = shift[i][1]
-                    new_obj.location[2] = shift[i][2]
-                context.scene.objects.link(new_obj)
-
-            bpy.ops.object.select_all(action='DESELECT')
-        return {'FINISHED'}
-
-class SketchOperatorCleanStrokes(bpy.types.Operator):
-    bl_idname = 'sketch.cleanstrokes'
-    bl_label = 'Cleaning strokes'
-    bl_options = {'REGISTER','UNDO'}
-
-    @classmethod
-    def poll(cls, context):
-        return (context.scene.grease_pencil != None)
-
-    def invoke(self, context, event):
-        g = context.scene.grease_pencil
-        for l in g.layers:
-            if l.active_frame!=None:
-                for s in l.active_frame.strokes:
-                    l.active_frame.strokes.remove(s)
-        return {'FINISHED'}
-
-################################################################################
 # Animation
 ################################################################################
-
 # Operator
 # https://wiki.blender.org/index.php/Dev:IT/2.5/Py/Scripts/Cookbook/Code_snippets/Armatures
 class AnimationOperatorPuppetAddBone(bpy.types.Operator):
@@ -634,7 +296,7 @@ class AnimationOperatorComicARAP(bpy.types.Operator):
         if event.type == 'LEFTMOUSE':
             if event.value == 'PRESS':
                 x, y = event.mouse_region_x, event.mouse_region_y
-                loc = region_2d_to_location_3d(context.region, context.space_data.region_3d, (x, y), bpy.context.scene.cursor_location)
+                loc = region_2d_to_location_3d(context.region, context.space_data.region_3d, (x, y), context.active_object.location)
                 if len(self.cp_after)<=0:
                     return {'FINISHED'}
                 min_dist = sys.float_info.max
@@ -661,7 +323,7 @@ class AnimationOperatorComicARAP(bpy.types.Operator):
                 return {'RUNNING_MODAL'}
 
             x, y = event.mouse_region_x, event.mouse_region_y
-            loc = region_2d_to_location_3d(context.region, context.space_data.region_3d, (x, y), bpy.context.scene.cursor_location)
+            loc = region_2d_to_location_3d(context.region, context.space_data.region_3d, (x, y), context.active_object.location)
 
             self.seleted_cp[0][0] = loc[0]
             self.seleted_cp[0][1] = loc[1]
@@ -1025,7 +687,6 @@ class AnimationOperatorPreview(bpy.types.Operator):
 ################################################################################
 # Recording
 ################################################################################
-
 class RecordingPropertyItem(bpy.types.PropertyGroup):
     name = bpy.props.StringProperty(name='Name', default='')
     index = bpy.props.IntProperty(name='Index', default=0)
@@ -1096,249 +757,6 @@ class RecordingOperatorListActionAdd(bpy.types.Operator):
         context.scene.frame_block_nb = 100
 
         return {"FINISHED"}
-
-################################################################################
-# OverView Drawing Using OpenGL
-# Modified from https://github.com/dfelinto/blender/blob/master/doc/python_api/examples/gpu.offscreen.1.py
-################################################################################
-
-class OffScreenDraw(bpy.types.Operator):
-    bl_idname = "view3d.offscreen_draw"
-    bl_label = "View3D Offscreen Draw"
-
-    _handle_calc = None
-    _handle_draw = None
-    is_enabled = False
-
-    # manage draw handler
-    @staticmethod
-    def draw_callback_px(self, context):
-        aspect_ratio = 1.0
-        self._update_offscreen(context, self._offscreen)
-        ncamera = len(context.scene.recording_array)
-        camera_trajectory = []
-        objects_pos = []
-        for i in range(ncamera):
-            camera_trajectory.append((context.scene.recording_array[i].camera_position0,context.scene.recording_array[i].camera_position1,context.scene.recording_array[i].camera_rotation_euler))
-
-        for obj in bpy.data.objects:
-            if obj.name!='Camera':
-                objects_pos.append((obj.location[0], obj.location[1]))
-
-        camera_pos = bpy.data.objects['Camera'].location
-        camera_orientation = bpy.data.objects['Camera'].rotation_euler[2]
-        current_camera = (camera_pos[0],camera_pos[1],camera_orientation)
-        self._opengl_draw(context, self._texture, aspect_ratio, 0.1, ncamera, camera_trajectory, current_camera, objects_pos)
-
-    @staticmethod
-    def handle_add(self, context):
-        OffScreenDraw._handle_draw = bpy.types.SpaceView3D.draw_handler_add(
-                self.draw_callback_px, (self, context), 'WINDOW', 'POST_PIXEL')
-
-    @staticmethod
-    def handle_remove():
-        if OffScreenDraw._handle_draw is not None:
-            bpy.types.SpaceView3D.draw_handler_remove(OffScreenDraw._handle_draw, 'WINDOW')
-        OffScreenDraw._handle_draw = None
-
-    # off-screen buffer
-    @staticmethod
-    def _setup_offscreen(context):
-        import gpu
-        try:
-            offscreen = gpu.offscreen.new(512, 512)
-        except Exception as e:
-            print(e)
-            offscreen = None
-        return offscreen
-
-    @staticmethod
-    def _update_offscreen(context, offscreen):
-        scene = context.scene
-        render = scene.render
-        camera = scene.camera
-
-        modelview_matrix = camera.matrix_world.inverted()
-        projection_matrix = camera.calc_matrix_camera(
-                render.resolution_x,
-                render.resolution_y,
-                render.pixel_aspect_x,
-                render.pixel_aspect_y,
-                )
-
-        offscreen.draw_view3d(
-                scene,
-                context.space_data,
-                context.region,
-                projection_matrix,
-                modelview_matrix,
-                )
-
-    @staticmethod
-    def _opengl_draw(context, texture, aspect_ratio, scale, ncamera, camera_trajectory, current_camera, objects_pos):
-        """
-        OpenGL code to draw a rectangle in the viewport
-        """
-
-        glDisable(GL_DEPTH_TEST)
-        glClearColor(1.0, 1.0, 1.0, 1.0)
-
-        # view setup
-        glMatrixMode(GL_PROJECTION)
-        glPushMatrix()
-        glLoadIdentity()
-
-        glMatrixMode(GL_MODELVIEW)
-        glPushMatrix()
-        glLoadIdentity()
-
-        glOrtho(-1, 1, -1, 1, -15, 15)
-        gluLookAt(0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0)
-
-        act_tex = Buffer(GL_INT, 1)
-        glGetIntegerv(GL_TEXTURE_2D, act_tex)
-
-        viewport = Buffer(GL_INT, 4)
-        glGetIntegerv(GL_VIEWPORT, viewport)
-
-        width = int(scale * viewport[2])
-        height = int(width / aspect_ratio)
-
-        glViewport(viewport[0], viewport[1], width, height)
-        glScissor(viewport[0], viewport[1], width, height)
-
-        # draw routine
-        glEnable(GL_TEXTURE_2D)
-        glActiveTexture(GL_TEXTURE0)
-
-        # glBindTexture(GL_TEXTURE_2D, texture)
-
-        # texco = [(1, 1), (0, 1), (0, 0), (1, 0)]
-        verco = [(1.0, 1.0), (-1.0, 1.0), (-1.0, -1.0), (1.0, -1.0)]
-
-        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
-
-        glColor4f(0.8, 0.8, 0.8, 1.0)
-
-        glBegin(GL_QUADS)
-        for i in range(4):
-            # glTexCoord3f(texco[i][0], texco[i][1], 0.0)
-            glVertex2f(verco[i][0], verco[i][1])
-        glEnd()
-
-        # plot grid
-        LINE_N = 10
-        for i in range(LINE_N):
-            point0 = (-1.0+2.0*i/LINE_N,-1.0)
-            point1 = (-1.0+2.0*i/LINE_N,1.0)
-            glBegin(GL_LINES)
-            glLineWidth(0.1)
-            glColor3f(0.0,0.0,0.0)
-            glVertex3f(point0[0],point0[1],0)
-            glVertex3f(point1[0],point1[1],0)
-            glEnd()
-
-            point0 = (-1.0,-1.0+2.0*i/LINE_N)
-            point1 = (1.0,-1.0+2.0*i/LINE_N)
-            glBegin(GL_LINES)
-            glLineWidth(0.1)
-            glColor3f(0.0,0.0,0.0)
-            glVertex3f(point0[0],point0[1],0)
-            glVertex3f(point1[0],point1[1],0)
-            glEnd()
-
-
-        for i in range(ncamera):
-            glBegin(GL_TRIANGLES)
-            glColor3f(0.3, 0.8, 0.3)
-            transform_matrix = mathutils.Matrix.Rotation(camera_trajectory[i][2], 3, 'Z')
-            translation = Vector((camera_trajectory[i][0]/20.0, camera_trajectory[i][1]/20.0, 0))
-            point0 = transform_matrix * Vector((-0.1,0.1,0)) + translation
-            point1 = transform_matrix * Vector((0.1,0.1,0)) + translation
-            glVertex3f(camera_trajectory[i][0]/20.0, camera_trajectory[i][1]/20.0, 0)
-            glVertex3f(point0[0],point0[1],0)
-            glVertex3f(point1[0],point1[1],0)
-            glEnd()
-
-        if ncamera>1:
-            for i in range(ncamera-1):
-                glBegin(GL_LINES);
-                glColor3f(0.5, 1.0, 0.5);
-                glLineWidth(0.2);
-                glVertex2f(camera_trajectory[i][0]/20.0, camera_trajectory[i][1]/20.0);
-                glVertex2f(camera_trajectory[i+1][0]/20.0, camera_trajectory[i+1][1]/20.0);
-                glEnd();
-
-        # current camera
-        glBegin(GL_TRIANGLES)
-        glColor3f(0.8, 0.3, 0.3)
-        transform_matrix = mathutils.Matrix.Rotation(current_camera[2], 3, 'Z')
-        translation = Vector((current_camera[0]/20.0, current_camera[1]/20.0, 0))
-        point0 = transform_matrix * Vector((-0.1,0.1,0)) + translation
-        point1 = transform_matrix * Vector((0.1,0.1,0)) + translation
-        glVertex3f(current_camera[0]/20.0, current_camera[1]/20.0, 0)
-        glVertex3f(point0[0],point0[1],0)
-        glVertex3f(point1[0],point1[1],0)
-        glEnd()
-        opengl_utils.draw_dot(current_camera[0]/20.0, current_camera[1]/20.0, 0.9)
-
-        # OBJECTS DRAWING
-        for loc in objects_pos:
-            opengl_utils.draw_dot(loc[0]/20.0, loc[1]/20.0, 0.0)
-
-        # restoring settings
-        # glBindTexture(GL_TEXTURE_2D, act_tex[0])
-
-        glDisable(GL_TEXTURE_2D)
-
-        # reset view
-        glMatrixMode(GL_PROJECTION)
-        glPopMatrix()
-
-        glMatrixMode(GL_MODELVIEW)
-        glPopMatrix()
-
-        glViewport(viewport[0], viewport[1], viewport[2], viewport[3])
-        glScissor(viewport[0], viewport[1], viewport[2], viewport[3])
-
-    # operator functions
-    @classmethod
-    def poll(cls, context):
-        return context.area.type == 'VIEW_3D'
-
-    def modal(self, context, event):
-        if context.area:
-            context.area.tag_redraw()
-
-        return {'PASS_THROUGH'}
-
-    def invoke(self, context, event):
-        if OffScreenDraw.is_enabled:
-            self.cancel(context)
-            return {'FINISHED'}
-        else:
-            self._offscreen = OffScreenDraw._setup_offscreen(context)
-            if self._offscreen:
-                self._texture = self._offscreen.color_texture
-            else:
-                self.report({'ERROR'}, "Error initializing offscreen buffer. More details in the console")
-                return {'CANCELLED'}
-
-            OffScreenDraw.handle_add(self, context)
-            OffScreenDraw.is_enabled = True
-
-            if context.area:
-                context.area.tag_redraw()
-
-            context.window_manager.modal_handler_add(self)
-            return {'RUNNING_MODAL'}
-
-    def cancel(self, context):
-        OffScreenDraw.handle_remove()
-        OffScreenDraw.is_enabled = False
-
-        if context.area:
-            context.area.tag_redraw()
 
 ################################################################################
 # UIs:
@@ -1494,8 +912,8 @@ def register():
 
     # modeling
     bpy.types.Scene.on_surface = bpy.props.BoolProperty(name='on_surface', default=False)
-    bpy.types.Scene.add_noise = bpy.props.BoolProperty(name='Add Noise', default=False)
-    bpy.types.Scene.instance_nb = bpy.props.IntProperty(name='#', default=6)
+    bpy.types.Scene.add_noise = bpy.props.BoolProperty(name='Animation Noise', default=False)
+    bpy.types.Scene.instance_nb = bpy.props.IntProperty(name='Number', default=6)
     bpy.types.Scene.plane_modeling_smalldepth = bpy.props.FloatProperty(name='small_depth', default=0.0)
 
     # Animation
@@ -1516,8 +934,6 @@ def register():
     bpy.app.handlers.scene_update_post.append(cursor_handler)
 
 def unregister():
-    bpy.utils.unregister_module(__name__)
-
     del bpy.types.Scene.my_settings
 
     # modeling
@@ -1536,6 +952,8 @@ def unregister():
     del bpy.types.Scene.recording_index
 
     bpy.app.handlers.scene_update_post.remove(cursor_handler)
+
+    bpy.utils.unregister_module(__name__)
 
 if __name__ == "__main__" :
     register()

@@ -1,3 +1,88 @@
+# class AnimationBrushes:
+#     gp = [None]
+#     brush_dict = {}
+
+
+# def AnimationHandlerUpdateBrushes(self, context):
+#     if brushes.AnimationBrushes.gp[0] == None:
+#         brushes.AnimationBrushes.gp[0] = bpy.data.grease_pencil.new('AnimationPencil')
+#
+#     gp = brushes.AnimationBrushes.gp[0]
+#     context.scene.grease_pencil = gp
+#
+#     if 'FOLLOWPATH' not in brushes.AnimationBrushes.brush_dict:
+#         layer = gp.layers.new('FOLLOWPATH')
+#         layer.tint_color = (1.0, 0.0, 0.0)
+#         layer.tint_factor = 1.0
+#         brushes.AnimationBrushes.brush_dict['FOLLOWPATH'] = layer
+#     if 'HPOINT' not in brushes.AnimationBrushes.brush_dict:
+#         layer = gp.layers.new('HPOINT')
+#         layer.tint_color = (0.5, 0.5, 0.5)
+#         layer.tint_factor = 1.0
+#         brushes.AnimationBrushes.brush_dict['HPOINT'] = layer
+#     if 'ARAP' not in brushes.AnimationBrushes.brush_dict:
+#         layer = gp.layers.new('ARAP')
+#         layer.tint_color = (0.5, 1.0, 0.0)
+#         layer.tint_factor = 1.0
+#         brushes.AnimationBrushes.brush_dict['ARAP'] = layer
+#
+#     if context.scene.enum_brushes!=None:
+#         gp.layers.active = brushes.AnimationBrushes.brush_dict[context.scene.enum_brushes]
+#
+#     return None
+
+
+# import bpy
+#
+# # TODO, the patterns look similar, refactoring it later
+#
+# # https://blender.stackexchange.com/questions/23086/add-a-simple-vertex-via-python
+# def create_triangle(name, verts):
+#     # create a new mesh
+#     mesh = bpy.data.meshes.new(name+'_mesh')
+#     obj = bpy.data.objects.new(name, mesh)
+#
+#     # link
+#     bpy.context.scene.objects.link(obj)
+#     mesh.from_pydata(verts, [], [[0, 1, 2]])
+#     mesh.update()
+#     return obj
+#
+# # https://blender.stackexchange.com/questions/6750/poly-bezier-curve-from-a-list-of-coordinates
+# def create_curve(name, verts):
+#     curve = bpy.data.curves.new(name+'_curve', type='CURVE')
+#     curve.dimensions = '3D'
+#     curve.resolution_u = 2
+#
+#     polyline = curve.splines.new('NURBS')
+#     polyline.points.add(len(verts))
+#     for i, coord in enumerate(verts):
+#         x, y, z = coord
+#         polyline.points[i].co = (x, y, z, 1)
+#
+#     # link
+#     obj = bpy.data.objects.new(name, curve)
+#     bpy.context.scene.objects.link(obj)
+#     return [obj, curve]
+
+# def get_boundingbox_of_verts(verts):
+#     import sys
+#     bbx_min = sys.maxsize
+#     bbx_max = -sys.maxsize
+#     bbz_min = sys.maxsize
+#     bbz_max = -sys.maxsize
+#     for i in range(len(verts)):
+#         if verts[i].x < bbx_min:
+#             bbx_min = verts[i].x
+#         if verts[i].x > bbx_max:
+#             bbx_max = verts[i].x
+#         if verts[i].z < bbz_min:
+#             bbz_min = verts[i].z
+#         if verts[i].z > bbz_max:
+#             bbz_max = verts[i].z
+#
+#     return (bbx_min, bbx_max, bbz_min, bbz_max)
+
 # class AnimationOperatorAddBone(bpy.types.Operator):
 #     bl_idname = 'animation.add_bone'
 #     bl_label = 'Add Bone'
