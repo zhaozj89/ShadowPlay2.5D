@@ -640,7 +640,7 @@ class AnimationOperatorFollowPath(bpy.types.Operator):
             return {'FINISHED'}
         strokes = af.strokes
 
-        if (strokes==None) or (len(strokes)>10):
+        if (strokes==None):
             return {'FINISHED'}
 
         self.current_frame = context.scene.current_frame

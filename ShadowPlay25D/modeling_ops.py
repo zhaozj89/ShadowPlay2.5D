@@ -244,9 +244,13 @@ class ModelingOperatorInstancing(bpy.types.Operator):
                             y_cur = model_fcurve_y.keyframe_points[k].co[1]+y_pre2-y_pre
                             z_cur = model_fcurve_z.keyframe_points[k].co[1]+z_pre2-z_pre
 
-                        fcurve_x.keyframe_points.insert(frame_idx, x_cur+random.gauss(0, 0.05), {'FAST'})
-                        fcurve_y.keyframe_points.insert(frame_idx, y_cur+random.gauss(0, 0.05), {'FAST'})
-                        fcurve_z.keyframe_points.insert(frame_idx, z_cur+random.gauss(0, 0.05), {'FAST'})
+                        if context.scene.add_noise==True:
+                            offset = random.gauss(0, 0.05)
+                        else:
+                            offset = 0.0
+                        fcurve_x.keyframe_points.insert(frame_idx, x_cur+offset, {'FAST'})
+                        fcurve_y.keyframe_points.insert(frame_idx, y_cur+offset, {'FAST'})
+                        fcurve_z.keyframe_points.insert(frame_idx, z_cur+offset, {'FAST'})
 
                         x_pre = model_fcurve_x.keyframe_points[k].co[1]
                         y_pre = model_fcurve_y.keyframe_points[k].co[1]
