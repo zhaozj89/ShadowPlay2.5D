@@ -609,9 +609,9 @@ class AnimationOperatorBoneDeform(bpy.types.Operator):
         context.window_manager.modal_handler_add(self)
         return {'RUNNING_MODAL'}
 
-class AnimationOperatorARAP(bpy.types.Operator):
+class AnimationOperatorPUPPET(bpy.types.Operator):
     bl_idname = 'animation.animation_arap'
-    bl_label = 'Animation ARAP'
+    bl_label = 'Animation PUPPET'
     bl_options = {'REGISTER','UNDO'}
 
     def __init__(self):
@@ -776,7 +776,7 @@ class AnimationOperatorARAP(bpy.types.Operator):
         self.frames = [context.scene.current_frame+i for i in range(context.scene.frame_block_nb)]
         if self.mesh.animation_data==None:
             self.mesh.animation_data_create()
-            action = bpy.data.actions.new(name='ARAP_Animation')
+            action = bpy.data.actions.new(name='PUPPET_Animation')
             self.mesh.animation_data.action = action
 
         self.fcurve_x = {}
@@ -917,10 +917,10 @@ class AnimationOperatorUpdate(bpy.types.Operator):
                         fcurve_z.keyframe_points.insert(self.frames[i], position[2], {'FAST'})
 
 
-        elif context.scene.enum_brushes=='HPOINT':
+        elif context.scene.enum_brushes=='COMIC':
             mesh = obj.data
             mesh.animation_data_create()
-            action = bpy.data.actions.new(name='HPOINT_Animation')
+            action = bpy.data.actions.new(name='COMIC_Animation')
             mesh.animation_data.action = action
 
             # Point handler
@@ -1343,21 +1343,21 @@ class SingleViewAnimationUIPanel(Panel):
 
         if my_settings.enum_mode == 'IMPORT_MODE':
             box.operator('import_image.to_grid', text='Import', icon='FILE_FOLDER')
-
         elif my_settings.enum_mode == 'MODELING_MODE':
             row = box.row(align=True)
             row.prop(context.scene, 'add_noise')
             row.prop(context.scene, 'instance_nb')
             box.operator('modeling.instancing', text='Instancing', icon='BOIDS')
-
         elif my_settings.enum_mode == 'ANIMATION_MODE':
             box.prop(context.scene, 'enum_brushes', text='Brushes')
             box.separator()
-            if (scene.enum_brushes=='FOLLOWPATH') or (scene.enum_brushes=='HPOINT'):
+            if (scene.enum_brushes=='FOLLOWPATH'):
                 box.operator('animation.animation_update', text='Update', icon='ANIM')
-            elif scene.enum_brushes=='ARAP':
+            elif (scene.enum_brushes=='COMIC'):
                 row = box.row(align=True)
-                row.operator('animation.animation_arap', text='Point Interprete and Deform', icon='OUTLINER_DATA_MESH')
+                row.operator('animation.animation_update', text='Soft', icon='ANIM')
+                row.operator('animation.animation_arap', text='ARAP', icon='OUTLINER_DATA_MESH')
+            elif scene.enum_brushes=='PUPPET':
                 row = box.row(align=True)
                 row.operator('animation.animation_bone', text='Bone Interprete', icon='BONE_DATA')
                 row.operator('animation.bone_deform', text='Bone Deform', icon='OUTLINER_DATA_MESH')
@@ -1493,11 +1493,11 @@ def register():
 
     # Animation
     bpy.types.Scene.enum_brushes = bpy.props.EnumProperty(name='Brushes',
-                                                description='Different Brushes',
+                                                description='Stylized Brushes',
                                                 items=[('','',''),
-                                                       ('FOLLOWPATH','Path Following',''),
-                                                       ('HPOINT','Handle Point',''),
-                                                       ('ARAP','Rigid Deformation','')],
+                                                       ('FOLLOWPATH','Following Path',''),
+                                                       ('COMIC','Comic Style',''),
+                                                       ('PUPPET','Shadow Puppet Style','')],
                                                 default='')
     bpy.types.Scene.current_frame = bpy.props.IntProperty(name="current_frame", default=1)
     bpy.types.Scene.frame_block_nb = bpy.props.IntProperty(name='frame_block_nb', default=100)
