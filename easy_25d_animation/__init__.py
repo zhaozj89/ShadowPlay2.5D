@@ -506,6 +506,7 @@ class AnimationOperatorBone(bpy.types.Operator):
 
         pre_name = None
         boneTable = []
+        origin = self.obj.location
         for idx, stroke in enumerate(strokes):
             points = stroke.points
             if len(points)==0:
@@ -519,7 +520,7 @@ class AnimationOperatorBone(bpy.types.Operator):
             boneTable.append(item)
             pre_name = current_name
 
-        bent = self._createRig(self.obj.name, self.obj.location, boneTable)
+        bent = self._createRig(self.obj.name, origin, boneTable)
 
         self.obj.select = True
         bpy.ops.object.parent_set(type="ARMATURE_AUTO")
@@ -541,9 +542,9 @@ class AnimationOperatorBoneDeform(bpy.types.Operator):
         bpy.ops.object.mode_set(mode='POSE')
 
     # # potential bug, be careful about it
-    # def __del__(self):
+    def __del__(self):
     #     # print('delete')
-    #     bpy.ops.object.mode_set(mode='OBJECT')
+        bpy.ops.object.mode_set(mode='OBJECT')
 
     @classmethod
     def poll(cls, context):
@@ -576,28 +577,18 @@ class AnimationOperatorBoneDeform(bpy.types.Operator):
             self.bone.rotation_mode = 'QUATERNION'
             vec1 = loc - self.bone.head
             vec2 = self.pre_loc - self.bone.head
-
             angle = vec1.angle(vec2)
+            normal = -np.cross(np.array(vec1), np.array(vec2))
 
-            vec3 = self.bone.head - bpy.data.objects['Camera'].location
-
-            v1 = np.cross(np.array(vec1), np.array(vec2))
-
-            sign = np.dot(v1, vec3)
-            if sign>0:
-                angle = -angle
-
-            cursor_location = bpy.context.scene.cursor_location
+            pivot_loc = self.bone.head
             cam = bpy.data.objects['Camera']
-            axis = (cursor_location - cam.location).normalized()
+            axis = Vector((normal[0],normal[1],normal[2])).normalized()
             quat = mathutils.Quaternion(axis, angle)
-
-            cursor_loc = bpy.context.scene.cursor_location
-            mat = (Matrix.Translation(cursor_loc) *
+            mat = (Matrix.Translation(pivot_loc) *
                    quat.to_matrix().to_4x4() *
-                   Matrix.Translation(-cursor_loc))
+                   Matrix.Translation(-pivot_loc))
 
-            self.bone.matrix = mat * self.bone.matrix
+            self.bone.matrix = self.obj.matrix_world.inverted() * mat * self.obj.matrix_world * self.bone.matrix
 
             self.pre_loc = loc
 
@@ -611,6 +602,7 @@ class AnimationOperatorBoneDeform(bpy.types.Operator):
         return {'PASS_THROUGH'}
 
     def invoke(self, context, event):
+        self.obj = context.active_object
         self.frames = [context.scene.current_frame+i for i in range(context.scene.frame_block_nb)]
         context.window_manager.modal_handler_add(self)
         return {'RUNNING_MODAL'}
