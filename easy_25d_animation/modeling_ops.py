@@ -21,6 +21,7 @@ import random
 import copy
 from numpy import linalg as LA
 from sklearn.decomposition import PCA
+
 class ModelingOperatorInterpreteContour(bpy.types.Operator):
     bl_idname = "modeling.interpret_contour"
     bl_label = "Interprete contour stroke"

@@ -38,8 +38,9 @@ if "bpy" in locals():
     importlib.reload(modeling_ops)
     importlib.reload(sketch_ops)
     importlib.reload(subview_ops)
+    improtlib.reload(backgroundcolor_ops)
 else:
-    from . import view3d_ops, modeling_ops, sketch_ops, subview_ops
+    from . import view3d_ops, modeling_ops, sketch_ops, subview_ops, backgroundcolor_ops
 
 import os
 import sys
@@ -804,6 +805,7 @@ class SingleViewAnimationUIPanel(Panel):
             # row = box.row()
             row.prop(context.scene.world, "horizon_color", text="Ground Color")
             # row.column().prop(world, "zenith_color", text='Sky Color')
+            box.operator('background_color.insert', text='Insert', icon='MATCAP_13')
 
         layout.split()
 
@@ -814,7 +816,7 @@ class SingleViewAnimationUIPanel(Panel):
         row.operator('gpencil.draw', text='Eraser', icon='FORCE_CURVE').mode='ERASER'
         row=box.row(align=True)
         row.operator('modeling.interpret_contour', text='Interprete', icon='PARTICLE_DATA')
-        row.operator('modeling.generate_surface', text='Generate Surface')
+        row.operator('modeling.generate_surface', text='Generate Surface', icon='MOD_SOFT')
         row=box.row(align=True)
         if context.scene.on_surface==True:
             row.operator('modeling.on_surface', text='Surface', icon='SURFACE_NSURFACE')
