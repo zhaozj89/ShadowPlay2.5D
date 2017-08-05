@@ -461,7 +461,7 @@ class AnimationOperatorBone(bpy.types.Operator):
     bl_options = {'REGISTER','UNDO'}
 
     def _createRig(self, name, origin, boneTable):
-        bpy.ops.object.add(type='ARMATURE', enter_editmode=True, location=Vector((0,0,0)))
+        bpy.ops.object.add(type='ARMATURE', enter_editmode=True, location=origin)
         ob = bpy.context.object
         ob.show_x_ray = True
         ob.name = name
@@ -512,8 +512,8 @@ class AnimationOperatorBone(bpy.types.Operator):
             if len(points)==0:
                 continue
             else:
-                tail = points[-1].co
-                head = points[0].co
+                tail = points[-1].co - origin
+                head = points[0].co - origin
 
             current_name = 'bone' + str(idx)
             item = (current_name, pre_name, head, tail)
@@ -542,9 +542,9 @@ class AnimationOperatorBoneDeform(bpy.types.Operator):
         bpy.ops.object.mode_set(mode='POSE')
 
     # # potential bug, be careful about it
-    def __del__(self):
+    # def __del__(self):
     #     # print('delete')
-        bpy.ops.object.mode_set(mode='OBJECT')
+        # bpy.ops.object.mode_set(mode='OBJECT')
 
     @classmethod
     def poll(cls, context):
@@ -554,7 +554,7 @@ class AnimationOperatorBoneDeform(bpy.types.Operator):
         if event.type == 'LEFTMOUSE':
             if event.value == 'PRESS':
                 x, y = event.mouse_region_x, event.mouse_region_y
-                loc = region_2d_to_location_3d(context.region, context.space_data.region_3d, (x, y), bpy.context.scene.cursor_location)
+                loc = region_2d_to_location_3d(context.region, context.space_data.region_3d, (x, y), self.obj.location)
                 self.pre_loc = loc
 
                 bones = context.active_object.pose.bones
@@ -572,18 +572,20 @@ class AnimationOperatorBoneDeform(bpy.types.Operator):
                 return {'FINISHED'}
         if (event.type == 'MOUSEMOVE') and (self.left_pressed==True):
             x, y = event.mouse_region_x, event.mouse_region_y
-            loc = region_2d_to_location_3d(context.region, context.space_data.region_3d, (x, y), bpy.context.scene.cursor_location)
-
+            loc = region_2d_to_location_3d(context.region, context.space_data.region_3d, (x, y), self.obj.location)
             self.bone.rotation_mode = 'QUATERNION'
-            vec1 = loc - self.bone.head
-            vec2 = self.pre_loc - self.bone.head
+
+            pivot_loc = self.bone.head + self.obj.location
+            vec1 = loc - pivot_loc
+            vec2 = self.pre_loc - pivot_loc
             angle = vec1.angle(vec2)
             normal = -np.cross(np.array(vec1), np.array(vec2))
 
-            pivot_loc = self.bone.head
             cam = bpy.data.objects['Camera']
             axis = Vector((normal[0],normal[1],normal[2])).normalized()
             quat = mathutils.Quaternion(axis, angle)
+            # print(quat)
+
             mat = (Matrix.Translation(pivot_loc) *
                    quat.to_matrix().to_4x4() *
                    Matrix.Translation(-pivot_loc))
