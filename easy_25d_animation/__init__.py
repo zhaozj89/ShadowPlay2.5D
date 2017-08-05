@@ -432,8 +432,8 @@ class ModelingOperatorInstancing(bpy.types.Operator):
             bpy.ops.object.select_all(action='DESELECT')
         return {'FINISHED'}
 
-class ModelingOperatorCleanStrokes(bpy.types.Operator):
-    bl_idname = 'layout.cleanstrokes'
+class SketchOperatorCleanStrokes(bpy.types.Operator):
+    bl_idname = 'sketch.cleanstrokes'
     bl_label = 'Cleaning strokes'
     bl_options = {'REGISTER','UNDO'}
 
@@ -455,9 +455,9 @@ class ModelingOperatorCleanStrokes(bpy.types.Operator):
 
 # Operator
 # https://wiki.blender.org/index.php/Dev:IT/2.5/Py/Scripts/Cookbook/Code_snippets/Armatures
-class AnimationOperatorBone(bpy.types.Operator):
-    bl_idname = 'animation.animation_bone'
-    bl_label = 'Animation Bone'
+class AnimationOperatorPuppetAddBone(bpy.types.Operator):
+    bl_idname = 'animation.animation_puppet_add_bone'
+    bl_label = 'Animation Puppet Add Bone'
     bl_options = {'REGISTER','UNDO'}
 
     def _createRig(self, name, origin, boneTable):
@@ -530,9 +530,9 @@ class AnimationOperatorBone(bpy.types.Operator):
         return {'FINISHED'}
 
 # https://blender.stackexchange.com/questions/7598/rotation-around-the-cursor-with-low-level-python-no-bpy-ops/7603#7603
-class AnimationOperatorBoneDeform(bpy.types.Operator):
-    bl_idname = 'animation.bone_deform'
-    bl_label = 'Animation Bone Deform'
+class AnimationOperatorPuppetBoneDeform(bpy.types.Operator):
+    bl_idname = 'animation.animation_puppet_bone_deform'
+    bl_label = 'Animation Puppet Bone Deform'
     bl_options = {'REGISTER','UNDO'}
 
     def __init__(self):
@@ -569,6 +569,8 @@ class AnimationOperatorBoneDeform(bpy.types.Operator):
                 return {'RUNNING_MODAL'}
 
             if event.value == 'RELEASE':
+                if self.counter > context.scene.frame_block_nb:
+                    context.scene.frame_block_nb = self.counter
                 return {'FINISHED'}
         if (event.type == 'MOUSEMOVE') and (self.left_pressed==True):
             x, y = event.mouse_region_x, event.mouse_region_y
@@ -594,10 +596,9 @@ class AnimationOperatorBoneDeform(bpy.types.Operator):
 
             self.pre_loc = loc
 
-            self.bone.keyframe_insert(data_path="rotation_quaternion",frame=self.frames[self.counter])
+            self.bone.keyframe_insert(data_path="rotation_quaternion",frame=(self.current_frame+self.counter))
 
-            if self.counter < context.scene.frame_block_nb-1:
-                self.counter+=1
+            self.counter += 1
 
             return {'RUNNING_MODAL'}
 
@@ -605,17 +606,18 @@ class AnimationOperatorBoneDeform(bpy.types.Operator):
 
     def invoke(self, context, event):
         self.obj = context.active_object
-        self.frames = [context.scene.current_frame+i for i in range(context.scene.frame_block_nb)]
+        self.current_frame = context.scene.current_frame
         context.window_manager.modal_handler_add(self)
         return {'RUNNING_MODAL'}
 
-class AnimationOperatorPUPPET(bpy.types.Operator):
-    bl_idname = 'animation.animation_arap'
-    bl_label = 'Animation PUPPET'
+class AnimationOperatorComicARAP(bpy.types.Operator):
+    bl_idname = 'animation.animation_comic_arap'
+    bl_label = 'Animation Comic ARAP'
     bl_options = {'REGISTER','UNDO'}
 
     def __init__(self):
         # print("Start Invoke")
+        self.counter = 0
         self.cp_before = []
         self.cp_after = []
         self.seleted_cp = [None]
@@ -651,6 +653,8 @@ class AnimationOperatorPUPPET(bpy.types.Operator):
                     self.leftmouse_pressed = True
                 return {'RUNNING_MODAL'}
             if event.value == 'RELEASE':
+                if self.counter>context.scene.frame_block_nb:
+                    context.scene.frame_block_nb = self.counter
                 return {'FINISHED'}
         if (event.type == 'MOUSEMOVE') and (self.leftmouse_pressed==True):
             if self.seleted_cp[0]==None:
@@ -686,6 +690,7 @@ class AnimationOperatorPUPPET(bpy.types.Operator):
                 q_star[idx] = numerator / w_sum
 
             # compute new positions
+            frame = self.current_frame+self.counter
             for vert in self.mesh.vertices:
                 idx = vert.index
                 f_hat = np.zeros(2)
@@ -700,13 +705,12 @@ class AnimationOperatorPUPPET(bpy.types.Operator):
 
                 if self.fcurve_x[vert.index]==None:
                     self.fcurve_x[vert.index] = self.action.fcurves.new('vertices[%d].co'%vert.index, index=0)
-                self.fcurve_x[vert.index].keyframe_points.insert(self.frames[self.counter], vco_new[0], {'FAST'})
+                self.fcurve_x[vert.index].keyframe_points.insert(frame, vco_new[0], {'FAST'})
                 if self.fcurve_y[vert.index]==None:
                     self.fcurve_y[vert.index] = self.action.fcurves.new('vertices[%d].co'%vert.index, index=1)
-                self.fcurve_y[vert.index].keyframe_points.insert(self.frames[self.counter], vco_new[1], {'FAST'})
+                self.fcurve_y[vert.index].keyframe_points.insert(frame, vco_new[1], {'FAST'})
 
-            if self.counter < context.scene.frame_block_nb-1:
-                self.counter+=1
+            self.counter+=1
             return {'RUNNING_MODAL'}
 
         return {'PASS_THROUGH'}
@@ -772,8 +776,6 @@ class AnimationOperatorPUPPET(bpy.types.Operator):
         self.mesh = self.obj.data
 
         # ADD animation data
-        self.counter = 0
-        self.frames = [context.scene.current_frame+i for i in range(context.scene.frame_block_nb)]
         if self.mesh.animation_data==None:
             self.mesh.animation_data_create()
             action = bpy.data.actions.new(name='PUPPET_Animation')
@@ -856,12 +858,106 @@ class AnimationOperatorPUPPET(bpy.types.Operator):
                 A[idx] = self.weight_list[i][idx]*A[idx]
             self.A_list.append(A)
 
+        self.current_frame = context.scene.current_frame
+
         context.window_manager.modal_handler_add(self)
         return {'RUNNING_MODAL'}
 
-class AnimationOperatorUpdate(bpy.types.Operator):
-    bl_idname = 'animation.animation_update'
-    bl_label = 'Animation Update'
+class AnimationOperatorComicSoft(bpy.types.Operator):
+    bl_idname = 'animation.animation_comic_soft'
+    bl_label = 'Animation Comic Soft'
+    bl_options = {'REGISTER','UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        return (context.active_object!=None) and (context.scene.grease_pencil!=None)
+
+    def invoke(self, context, event):
+        # import pdb; pdb.set_trace()
+        gp = context.scene.grease_pencil
+
+        obj = context.active_object
+        ly = gp.layers.active
+        if ly==None:
+            return {'FINISHED'}
+        af = ly.active_frame
+        if af==None:
+            return {'FINISHED'}
+        strokes = af.strokes
+
+        if (strokes==None):
+            return {'FINISHED'}
+
+        self.current_frame = context.scene.current_frame
+        mesh = obj.data
+        mesh.animation_data_create()
+        action = bpy.data.actions.new(name='COMIC_Animation')
+        mesh.animation_data.action = action
+
+        # Point handler
+        pca = PCA(n_components=2)
+
+        try:
+            stroke = strokes[-1]
+        except IndexError:
+            pass
+        else:
+            phandler = stroke.points[0].co.xyz
+            ppath = [p.co.xz for p in stroke.points]
+            phandler = np.array(phandler)
+            ppath = np.array(ppath) # the size is correct, amazing
+
+            #PCA
+            res = pca.fit(ppath).transform(ppath)
+            res[:,1] = 0.0
+            new_ppath = pca.inverse_transform(res)
+            new_phandler = phandler
+
+            # proportional based linear blend skinning
+            (nframe, ndim) = new_ppath.shape
+            delta_list = []
+            max_val = 0.01
+            def clamp(val, max_val):
+                sign = np.sign(val)
+                abs_val = abs(val)
+                abs_val = min(abs_val, max_val)
+                return sign*abs_val
+
+            for i in range(1, nframe):
+                t0 = clamp(new_ppath[i, 0] - new_ppath[i-1, 0], max_val)
+                t1 = clamp(new_ppath[i, 1] - new_ppath[i-1, 1], max_val)
+                delta_list.append((t0, t1))
+
+            weight = {}
+            matrix_world = obj.matrix_world
+            for vert in mesh.vertices:
+                v_co_world = np.array(matrix_world*vert.co)
+                dist = LA.norm(v_co_world-new_phandler, 2)
+                weight[vert.index] = np.exp(-dist)
+
+            self.current_frame = context.scene.current_frame
+
+            for vert in mesh.vertices:
+                fcurve_x = action.fcurves.new('vertices[%d].co'%vert.index, index=0)
+                fcurve_y = action.fcurves.new('vertices[%d].co'%vert.index, index=1)
+                co_kf_x = vert.co[0]
+                co_kf_y = vert.co[1]
+                for i, val in enumerate(delta_list):
+                    co_kf_x += weight[vert.index]*val[0]
+                    co_kf_y += weight[vert.index]*val[1]
+                    frame = self.current_frame + i
+                    fcurve_x.keyframe_points.insert(frame, co_kf_x, {'FAST'})
+                    fcurve_y.keyframe_points.insert(frame, co_kf_y, {'FAST'})
+
+            N = len(delta_list)
+            if N>context.scene.frame_block_nb:
+                context.scene.frame_block_nb = N
+
+        return {'FINISHED'}
+
+class AnimationOperatorFollowPath(bpy.types.Operator):
+    bl_idname = 'animation.animation_follow_path'
+    bl_label = 'Animation Follow Path'
     bl_options = {'REGISTER','UNDO'}
 
     @classmethod
@@ -885,97 +981,29 @@ class AnimationOperatorUpdate(bpy.types.Operator):
             return {'FINISHED'}
 
         self.current_frame = context.scene.current_frame
+        try:
+            stroke = strokes[-1]
+        except IndexError:
+            pass
+        else:
+            obj.animation_data_create()
+            obj.animation_data.action = bpy.data.actions.new(name="LocationAnimation")
 
-        if context.scene.enum_brushes=='FOLLOWPATH':
-            try:
-                stroke = strokes[-1]
-            except IndexError:
-                pass
-            else:
-                obj.animation_data_create()
-                obj.animation_data.action = bpy.data.actions.new(name="LocationAnimation")
+            N = len(stroke.points)
 
-                N = len(stroke.points)
+            fcurve_x = obj.animation_data.action.fcurves.new(data_path='location', index=0)
+            fcurve_y = obj.animation_data.action.fcurves.new(data_path='location', index=1)
+            fcurve_z = obj.animation_data.action.fcurves.new(data_path='location', index=2)
 
-                fcurve_x = obj.animation_data.action.fcurves.new(data_path='location', index=0)
-                fcurve_y = obj.animation_data.action.fcurves.new(data_path='location', index=1)
-                fcurve_z = obj.animation_data.action.fcurves.new(data_path='location', index=2)
+            for i in range(N):
+                frame = self.current_frame + i
+                position = stroke.points[i].co
+                fcurve_x.keyframe_points.insert(frame, position[0], {'FAST'})
+                fcurve_y.keyframe_points.insert(frame, position[1], {'FAST'})
+                fcurve_z.keyframe_points.insert(frame, position[2], {'FAST'})
 
-                for i in range(N):
-                    frame = self.current_frame + i
-                    position = stroke.points[i].co
-                    fcurve_x.keyframe_points.insert(frame, position[0], {'FAST'})
-                    fcurve_y.keyframe_points.insert(frame, position[1], {'FAST'})
-                    fcurve_z.keyframe_points.insert(frame, position[2], {'FAST'})
-
-                if N>context.scene.frame_block_nb:
-                    context.scene.frame_block_nb = N
-
-        elif context.scene.enum_brushes=='COMIC':
-            mesh = obj.data
-            mesh.animation_data_create()
-            action = bpy.data.actions.new(name='COMIC_Animation')
-            mesh.animation_data.action = action
-
-            # Point handler
-            pca = PCA(n_components=2)
-
-            try:
-                stroke = strokes[-1]
-            except IndexError:
-                pass
-            else:
-                phandler = stroke.points[0].co.xyz
-                ppath = [p.co.xz for p in stroke.points]
-                phandler = np.array(phandler)
-                ppath = np.array(ppath) # the size is correct, amazing
-
-                #PCA
-                res = pca.fit(ppath).transform(ppath)
-                res[:,1] = 0.0
-                new_ppath = pca.inverse_transform(res)
-                new_phandler = phandler
-
-                # proportional based linear blend skinning
-                (nframe, ndim) = new_ppath.shape
-                delta_list = []
-                max_val = 0.01
-                def clamp(val, max_val):
-                    sign = np.sign(val)
-                    abs_val = abs(val)
-                    abs_val = min(abs_val, max_val)
-                    return sign*abs_val
-
-                for i in range(1, nframe):
-                    t0 = clamp(new_ppath[i, 0] - new_ppath[i-1, 0], max_val)
-                    t1 = clamp(new_ppath[i, 1] - new_ppath[i-1, 1], max_val)
-                    delta_list.append((t0, t1))
-
-                weight = {}
-                matrix_world = obj.matrix_world
-                for vert in mesh.vertices:
-                    v_co_world = np.array(matrix_world*vert.co)
-                    dist = LA.norm(v_co_world-new_phandler, 2)
-                    weight[vert.index] = np.exp(-dist)
-
-                self.current_frame = context.scene.current_frame
-
-                for vert in mesh.vertices:
-                    fcurve_x = action.fcurves.new('vertices[%d].co'%vert.index, index=0)
-                    fcurve_y = action.fcurves.new('vertices[%d].co'%vert.index, index=1)
-                    co_kf_x = vert.co[0]
-                    co_kf_y = vert.co[1]
-                    for i, val in enumerate(delta_list):
-                        co_kf_x += weight[vert.index]*val[0]
-                        co_kf_y += weight[vert.index]*val[1]
-                        frame = self.current_frame + i
-                        fcurve_x.keyframe_points.insert(frame, co_kf_x, {'FAST'})
-                        fcurve_y.keyframe_points.insert(frame, co_kf_y, {'FAST'})
-
-                N = len(delta_list)
-                if N>context.scene.frame_block_nb:
-                    context.scene.frame_block_nb = N
-
+            if N>context.scene.frame_block_nb:
+                context.scene.frame_block_nb = N
         return {'FINISHED'}
 
 class AnimationOperatorPreview(bpy.types.Operator):
@@ -1342,15 +1370,15 @@ class SingleViewAnimationUIPanel(Panel):
             box.prop(context.scene, 'enum_brushes', text='Brushes')
             box.separator()
             if (scene.enum_brushes=='FOLLOWPATH'):
-                box.operator('animation.animation_update', text='Update', icon='ANIM')
+                box.operator('animation.animation_follow_path', text='Update', icon='ANIM')
             elif (scene.enum_brushes=='COMIC'):
                 row = box.row(align=True)
-                row.operator('animation.animation_update', text='Soft', icon='ANIM')
-                row.operator('animation.animation_arap', text='ARAP', icon='OUTLINER_DATA_MESH')
+                row.operator('animation.animation_comic_soft', text='Soft', icon='ANIM')
+                row.operator('animation.animation_comic_arap', text='ARAP', icon='OUTLINER_DATA_MESH')
             elif scene.enum_brushes=='PUPPET':
                 row = box.row(align=True)
-                row.operator('animation.animation_bone', text='Bone Interprete', icon='BONE_DATA')
-                row.operator('animation.bone_deform', text='Bone Deform', icon='OUTLINER_DATA_MESH')
+                row.operator('animation.animation_puppet_add_bone', text='Bone Interprete', icon='BONE_DATA')
+                row.operator('animation.animation_puppet_bone_deform', text='Bone Deform', icon='OUTLINER_DATA_MESH')
         elif my_settings.enum_mode == 'LIGHTING_MODE':
             row = box.row(align=True)
             row.prop(context.scene.world, 'use_sky_paper', text='Background Color')
@@ -1374,7 +1402,7 @@ class SingleViewAnimationUIPanel(Panel):
             row.operator('modeling.on_surface', text='Surface', icon='SURFACE_NSURFACE')
         else:
             row.operator('modeling.on_surface', text='Cursor', icon='LAYER_ACTIVE')
-        row.operator('layout.cleanstrokes', text='Clean Strokes', icon='MESH_CAPSULE')
+        row.operator('sketch.cleanstrokes', text='Clean Strokes', icon='MESH_CAPSULE')
 
         layout.split()
 
@@ -1430,8 +1458,9 @@ class MultiViewCameraUIPanel(Panel):
         row.operator('recording.edit', icon='SEQ_SEQUENCER', text='Edit')
 
         row = box.row(align=True)
-        row.prop(context.scene, 'current_frame', text='CUR')
-        row.prop(context.scene, 'frame_block_nb', text='BLOCK')
+        row.prop(context.scene, 'current_frame', text='Start')
+        row.prop(context.scene, 'frame_block_nb', text='Number')
+        box.prop(context.scene, 'frame_current', text='Current')
         if context.screen.is_animation_playing==True:
             box.operator("animation.preview", text="Pause", icon='PAUSE')
         else:
