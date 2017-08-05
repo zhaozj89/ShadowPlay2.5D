@@ -223,7 +223,7 @@ class AnimationOperatorPuppetBoneDeform(bpy.types.Operator):
                 bones = context.active_object.pose.bones
                 min_dist = sys.float_info.max
                 for bone in bones:
-                    dist = LA.norm(np.array((loc-bone.center)), 2)
+                    dist = LA.norm(np.array((loc-bone.center-self.obj.location)), 2)
                     if dist<min_dist:
                         min_dist = dist
                         self.bone = bone
