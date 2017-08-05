@@ -756,6 +756,7 @@ class RecordingOperatorListActionAdd(bpy.types.Operator):
         item.end_frame = context.scene.current_frame+context.scene.frame_block_nb-1
         context.scene.current_frame+=context.scene.frame_block_nb
         context.scene.frame_block_nb = 100
+        context.scene.frame_current = context.scene.current_frame
 
         return {"FINISHED"}
 
