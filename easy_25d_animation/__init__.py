@@ -1216,6 +1216,7 @@ class OffScreenDraw(bpy.types.Operator):
             point0 = (-1.0+2.0*i/LINE_N,-1.0)
             point1 = (-1.0+2.0*i/LINE_N,1.0)
             glBegin(GL_LINES)
+            glLineWidth(0.1)
             glColor3f(0.0,0.0,0.0)
             glVertex3f(point0[0],point0[1],0)
             glVertex3f(point1[0],point1[1],0)
@@ -1224,6 +1225,7 @@ class OffScreenDraw(bpy.types.Operator):
             point0 = (-1.0,-1.0+2.0*i/LINE_N)
             point1 = (1.0,-1.0+2.0*i/LINE_N)
             glBegin(GL_LINES)
+            glLineWidth(0.1)
             glColor3f(0.0,0.0,0.0)
             glVertex3f(point0[0],point0[1],0)
             glVertex3f(point1[0],point1[1],0)
@@ -1375,7 +1377,7 @@ class SingleViewAnimationUIPanel(Panel):
         box.label('Sketch Tools')
         row=box.row(align=True)
         row.operator('gpencil.draw', text='Draw', icon='BRUSH_DATA').mode='DRAW'
-        row.operator('gpencil.draw', text='Draw', icon='FORCE_CURVE').mode='ERASER'
+        row.operator('gpencil.draw', text='Eraser', icon='FORCE_CURVE').mode='ERASER'
         row=box.row(align=True)
         row.operator('modeling.interpret_contour', text='Interprete', icon='PARTICLE_DATA')
         row.operator('modeling.generate_surface', text='Generate Surface')
