@@ -1026,7 +1026,6 @@ class AnimationOperatorPreview(bpy.types.Operator):
 # Recording
 ################################################################################
 
-# Property
 class RecordingPropertyItem(bpy.types.PropertyGroup):
     name = bpy.props.StringProperty(name='Name', default='')
     index = bpy.props.IntProperty(name='Index', default=0)
@@ -1037,7 +1036,6 @@ class RecordingPropertyItem(bpy.types.PropertyGroup):
     camera_position1 = bpy.props.FloatProperty(name='camera_position1', default=0.0)
     camera_rotation_euler = bpy.props.FloatProperty(name='camera_rotation_euler', default=0.0)
 
-# UI
 class RecordingUIListItem(UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
         split = layout.split(0.3)
@@ -1045,14 +1043,15 @@ class RecordingUIListItem(UIList):
         split.label('Start: %d' % item.start_frame)
         split.label('End: %d' % item.end_frame)
 
-# Operator
 class RecordingOperatorListActionEdit(bpy.types.Operator):
     bl_idname = 'recording.edit'
     bl_label = 'List Action Edit'
 
     def invoke(self, context, event):
         index = context.scene.recording_index
-        context.scene.frame_current = index*context.scene.frame_block_nb+1
+        context.scene.frame_current = context.scene.recording_array[index].start_frame
+        context.scene.current_frame = context.scene.recording_array[index].start_frame
+        context.scene.frame_block_nb = context.scene.recording_array[index].end_frame-context.scene.recording_array[index].start_frame+1
         return {'FINISHED'}
 
 # https://blender.stackexchange.com/questions/30444/create-an-interface-which-is-similar-to-the-material-list-box
@@ -1094,6 +1093,7 @@ class RecordingOperatorListActionAdd(bpy.types.Operator):
         item.start_frame = context.scene.current_frame
         item.end_frame = context.scene.current_frame+context.scene.frame_block_nb-1
         context.scene.current_frame+=context.scene.frame_block_nb
+        context.scene.frame_block_nb = 100
 
         return {"FINISHED"}
 
