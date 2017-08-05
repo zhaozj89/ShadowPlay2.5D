@@ -884,7 +884,7 @@ class AnimationOperatorUpdate(bpy.types.Operator):
         if (strokes==None) or (len(strokes)>10):
             return {'FINISHED'}
 
-        self.frames = [context.scene.current_frame+i for i in range(context.scene.frame_block_nb)]
+        self.current_frame = context.scene.current_frame
 
         if context.scene.enum_brushes=='FOLLOWPATH':
             try:
@@ -901,21 +901,15 @@ class AnimationOperatorUpdate(bpy.types.Operator):
                 fcurve_y = obj.animation_data.action.fcurves.new(data_path='location', index=1)
                 fcurve_z = obj.animation_data.action.fcurves.new(data_path='location', index=2)
 
-                if N<context.scene.frame_block_nb:
-                    for i in range(N):
-                        position = stroke.points[i].co
-                        fcurve_x.keyframe_points.insert(self.frames[i], position[0], {'FAST'})
-                        fcurve_y.keyframe_points.insert(self.frames[i], position[1], {'FAST'})
-                        fcurve_z.keyframe_points.insert(self.frames[i], position[2], {'FAST'})
-                else:
-                    float_step = N/context.scene.frame_block_nb
-                    for i in range(context.scene.frame_block_nb):
-                        idx = int(float_step*i)
-                        position = stroke.points[idx].co
-                        fcurve_x.keyframe_points.insert(self.frames[i], position[0], {'FAST'})
-                        fcurve_y.keyframe_points.insert(self.frames[i], position[1], {'FAST'})
-                        fcurve_z.keyframe_points.insert(self.frames[i], position[2], {'FAST'})
+                for i in range(N):
+                    frame = self.current_frame + i
+                    position = stroke.points[i].co
+                    fcurve_x.keyframe_points.insert(frame, position[0], {'FAST'})
+                    fcurve_y.keyframe_points.insert(frame, position[1], {'FAST'})
+                    fcurve_z.keyframe_points.insert(frame, position[2], {'FAST'})
 
+                if N>context.scene.frame_block_nb:
+                    context.scene.frame_block_nb = N
 
         elif context.scene.enum_brushes=='COMIC':
             mesh = obj.data
@@ -945,9 +939,16 @@ class AnimationOperatorUpdate(bpy.types.Operator):
                 # proportional based linear blend skinning
                 (nframe, ndim) = new_ppath.shape
                 delta_list = []
+                max_val = 0.01
+                def clamp(val, max_val):
+                    sign = np.sign(val)
+                    abs_val = abs(val)
+                    abs_val = min(abs_val, max_val)
+                    return sign*abs_val
+
                 for i in range(1, nframe):
-                    t0 = new_ppath[i, 0] - new_ppath[i-1, 0]
-                    t1 = new_ppath[i, 1] - new_ppath[i-1, 1]
+                    t0 = clamp(new_ppath[i, 0] - new_ppath[i-1, 0], max_val)
+                    t1 = clamp(new_ppath[i, 1] - new_ppath[i-1, 1], max_val)
                     delta_list.append((t0, t1))
 
                 weight = {}
@@ -957,22 +958,23 @@ class AnimationOperatorUpdate(bpy.types.Operator):
                     dist = LA.norm(v_co_world-new_phandler, 2)
                     weight[vert.index] = np.exp(-dist)
 
-                normalized_delta_list = []
-                for i in range(context.scene.frame_block_nb):
-                    normalized_delta_list.append(delta_list[i%len(delta_list)])
-
-                frames = [context.scene.current_frame+i for i in range(context.scene.frame_block_nb)]
+                self.current_frame = context.scene.current_frame
 
                 for vert in mesh.vertices:
                     fcurve_x = action.fcurves.new('vertices[%d].co'%vert.index, index=0)
                     fcurve_y = action.fcurves.new('vertices[%d].co'%vert.index, index=1)
                     co_kf_x = vert.co[0]
                     co_kf_y = vert.co[1]
-                    for frame, val in zip(frames, normalized_delta_list):
+                    for i, val in enumerate(delta_list):
                         co_kf_x += weight[vert.index]*val[0]
                         co_kf_y += weight[vert.index]*val[1]
+                        frame = self.current_frame + i
                         fcurve_x.keyframe_points.insert(frame, co_kf_x, {'FAST'})
                         fcurve_y.keyframe_points.insert(frame, co_kf_y, {'FAST'})
+
+                N = len(delta_list)
+                if N>context.scene.frame_block_nb:
+                    context.scene.frame_block_nb = N
 
         return {'FINISHED'}
 
@@ -1426,6 +1428,10 @@ class MultiViewCameraUIPanel(Panel):
         row = box.row(align=True)
         row.operator('recording.add', icon='ZOOMIN', text='Add')
         row.operator('recording.edit', icon='SEQ_SEQUENCER', text='Edit')
+
+        row = box.row(align=True)
+        row.prop(context.scene, 'current_frame', text='CUR')
+        row.prop(context.scene, 'frame_block_nb', text='BLOCK')
         if context.screen.is_animation_playing==True:
             box.operator("animation.preview", text="Pause", icon='PAUSE')
         else:
