@@ -1,3 +1,20 @@
+# def update_mode_func(self, context):
+#     mode = context.scene.edit_mode
+#     if mode=='Object':
+#         bpy.ops.object.mode_set(mode='OBJECT')
+#     elif mode=='Edit':
+#         bpy.ops.object.mode_set(mode='EDIT')
+#     elif mode=='Pose':
+#         bpy.ops.object.mode_set(mode='POSE')
+
+    # bpy.types.Scene.edit_mode = bpy.props.EnumProperty(name='Edit Mode',
+    #                                                 description='Different Modes',
+    #                                                 items=[('','',''),
+    #                                                        ('Object','Object',''),
+    #                                                        ('Edit','Edit',''),
+    #                                                        ('Pose','Pose','')],
+    #                                                 default='', update=update_mode_func)
+
             # column.prop(context.scene, 'construction_mode', text='Mode')
 # # Operator
 # class CameraOperatorSetting(bpy.types.Operator):

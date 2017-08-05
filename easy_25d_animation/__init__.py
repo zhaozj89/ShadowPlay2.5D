@@ -190,7 +190,7 @@ class View3DOperatorCamera(bpy.types.Operator):
 ################################################################################
 
 # Operator
-class modelingOperatorInterpreteContour(bpy.types.Operator):
+class ModelingOperatorInterpreteContour(bpy.types.Operator):
     bl_idname = "modeling.interpret_contour"
     bl_label = "Interprete contour stroke"
     bl_options = {'REGISTER', 'UNDO'}
@@ -275,7 +275,7 @@ class modelingOperatorInterpreteContour(bpy.types.Operator):
 
         return {'FINISHED'}
 
-class modelingOperatorGenerateSurface(bpy.types.Operator):
+class ModelingOperatorGenerateSurface(bpy.types.Operator):
     bl_idname = "modeling.generate_surface"
     bl_label = "Generate Surface"
     bl_options = {'REGISTER', 'UNDO'}
@@ -324,7 +324,7 @@ class modelingOperatorGenerateSurface(bpy.types.Operator):
 
         return {'FINISHED'}
 
-class modelingOperatorOnSurface(bpy.types.Operator):
+class ModelingOperatorOnSurface(bpy.types.Operator):
     bl_idname = "modeling.on_surface"
     bl_label = "Grease pencil on surface or 3D cursor"
     bl_options = {'REGISTER', 'UNDO'}
@@ -339,7 +339,7 @@ class modelingOperatorOnSurface(bpy.types.Operator):
         context.scene.on_surface = not context.scene.on_surface
         return {'FINISHED'}
 
-class modelingOperatorInstancing(bpy.types.Operator):
+class ModelingOperatorInstancing(bpy.types.Operator):
     bl_idname = "modeling.instancing"
     bl_label = "Instancing"
     bl_options = {'REGISTER', 'UNDO'}
@@ -432,7 +432,7 @@ class modelingOperatorInstancing(bpy.types.Operator):
             bpy.ops.object.select_all(action='DESELECT')
         return {'FINISHED'}
 
-class modelingOperatorCleanStrokes(bpy.types.Operator):
+class ModelingOperatorCleanStrokes(bpy.types.Operator):
     bl_idname = 'layout.cleanstrokes'
     bl_label = 'Cleaning strokes'
     bl_options = {'REGISTER','UNDO'}
@@ -1465,27 +1465,11 @@ class RenderingUIPanel(Panel):
 ################################################################################
 # Logic:
 ################################################################################
-# def update_mode_func(self, context):
-#     mode = context.scene.edit_mode
-#     if mode=='Object':
-#         bpy.ops.object.mode_set(mode='OBJECT')
-#     elif mode=='Edit':
-#         bpy.ops.object.mode_set(mode='EDIT')
-#     elif mode=='Pose':
-#         bpy.ops.object.mode_set(mode='POSE')
 
 def register():
     bpy.utils.register_module(__name__)
 
     bpy.types.Scene.my_settings = PointerProperty(type=MySettingsProperty)
-
-    # bpy.types.Scene.edit_mode = bpy.props.EnumProperty(name='Edit Mode',
-    #                                                 description='Different Modes',
-    #                                                 items=[('','',''),
-    #                                                        ('Object','Object',''),
-    #                                                        ('Edit','Edit',''),
-    #                                                        ('Pose','Pose','')],
-    #                                                 default='', update=update_mode_func)
 
     # modeling
     bpy.types.Scene.on_surface = bpy.props.BoolProperty(name='on_surface', default=False)
