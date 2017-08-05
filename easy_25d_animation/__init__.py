@@ -992,20 +992,6 @@ class AnimationOperatorPreview(bpy.types.Operator):
 
         return {'FINISHED'}
 
-class AnimationOperatorAddBone(bpy.types.Operator):
-    bl_idname = 'animation.add_bone'
-    bl_label = 'Add Bone'
-    bl_options = {'REGISTER', 'UNDO'}
-
-    def invoke(self, context, event):
-        bpy.ops.object.armature_add()
-        ob = bpy.context.scene.objects.active
-        ob.data.draw_type = 'STICK'
-        ob.show_x_ray = True
-        bpy.ops.object.mode_set(mode='EDIT')
-
-        return {'FINISHED'}
-
 ################################################################################
 # Recording
 ################################################################################
