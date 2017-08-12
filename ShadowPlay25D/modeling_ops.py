@@ -191,6 +191,8 @@ class ModelingOperatorInstancing(bpy.types.Operator):
             return {'FINISHED'}
         strokes = af.strokes
 
+        random.seed()
+
         try:
             stroke = strokes[-1]
         except IndexError:
@@ -233,7 +235,9 @@ class ModelingOperatorInstancing(bpy.types.Operator):
                     x_pre = 0
                     z_pre = 0
 
-                    for k in range(N):
+                    step = max(1, int(random.gauss(0, 5)))
+                    k = 0
+                    while k<N:
                         frame_idx = model_fcurve_x.keyframe_points[k].co[0]
                         if k==0:
                             x_cur = shift[i][0]
@@ -259,6 +263,8 @@ class ModelingOperatorInstancing(bpy.types.Operator):
                         x_pre2 = x_cur
                         y_pre2 = y_cur
                         z_pre2 = z_cur
+
+                        k+=step
                 else:
                     new_obj.location[0] = shift[i][0]
                     new_obj.location[1] = shift[i][1]
