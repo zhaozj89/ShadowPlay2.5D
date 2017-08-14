@@ -649,8 +649,10 @@ class AnimationOperatorFollowPath(bpy.types.Operator):
         except IndexError:
             pass
         else:
-            obj.animation_data_create()
-            obj.animation_data.action = bpy.data.actions.new(name="LocationAnimation")
+            if obj.animation_data==None:
+                obj.animation_data_create()
+                obj.animation_data.action = bpy.data.actions.new(name="LocationAnimation")
+                len_fcurve = 0
 
             N = len(stroke.points)
 
