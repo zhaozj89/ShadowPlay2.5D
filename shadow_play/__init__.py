@@ -23,7 +23,7 @@ bl_info = {
     "name": "ShadowPlay2.5D",
     "author": "Zhenjie Zhao",
     "version": (0, 1),
-    "blender": (2, 78, 0),
+    "blender": (2, 79, 0),
     "location": "3D View",
     "description": "Sketch-based Shadow Play Animation Tools in 2.5D (depends on io_import_images_as_meshes.py)",
     "wiki_url": "http://hci.cse.ust.hk/index.html",

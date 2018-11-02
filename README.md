@@ -3,9 +3,13 @@ ShadowPlay2.5D
 
 Create 360 degree story videos with images
 
-## Requirements ##
+## Environment ##
 
-* Blender 2.79b (tested)
+* Blender 2.79b
+
+* Windows 7 or 10
+
+Please notice that it does not work on macOS. Linux is not tested.
 
 ## How to use? ##
 
@@ -25,7 +29,7 @@ Create 360 degree story videos with images
 
 2. Where is the imported source code?
    
-   On Mac, the path is `/Users/<username>/Library/Application Support/Blender/2.79/scripts/addons`
+   `C:\Users\<username>\AppData\Roaming\Blender Foundation\Blender\2.79\scripts\addons`
 
 3. How to install packages in bundled Python environment of Blender?
 
