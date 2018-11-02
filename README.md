@@ -10,4 +10,4 @@ Create 360 degree story videos with images
 * Activate these two addons
 
 ----------
-GNU LESSER GENERAL PUBLIC LICENSE
+GNU GENERAL PUBLIC LICENSE
