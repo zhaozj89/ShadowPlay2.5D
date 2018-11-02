@@ -15,6 +15,8 @@ Create 360 degree story videos with images
 
 * Activate these two addons
 
+* Set `startup.blend` as start file
+
 ## QA ##
 
 1. How to import an addon?
