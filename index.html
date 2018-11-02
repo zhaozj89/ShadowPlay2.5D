@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">    
+    <link href="bootstrap.min.css" rel="stylesheet" type="text/css"/>
+    <style type="text/css">
+    .FontStyleMiddle {
+      font-size: 20px;
+      font-family: Arial, Helvetica, sans-serif;
+      font-weight: bold;
+    }
+    .FontStyleBig {
+      font-size: 24px;
+      font-weight: bold;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+    </style>
+    <title>Fashion-Design-with-AI</title>
+  </head>
+
+  <body>
+    <div class="container">
+      <div class="jumbotron">
+        <div align="center"><span class="FontStyleBig">A Compensation Method of Two-stage Image Generation for Human-AI Collaborated In-situ Fashion Design in Augmented Reality Environment</span>
+        </div>
+      </div>
+
+      <div style="padding: 20px">
+        <div>
+            <img src="cover_web.png" style="width: 80%; margin: 50px"/>
+        </div>
+        <div>
+            <strong style="margin: 50px; text-align: center;">(a). Principle of compensation of human controllers; (b). using scenarios of the system (image and AR); (c). user interface.</strong>
+        </div>
+      </div>
+
+      <!-- content -->
+      <div>
+        <table class="table">
+          <tr>
+            <td bgcolor="#EEEEEE" height="231" width="83" style="vertical-align: middle">
+              <div class="FontStyleMiddle vertical-center" align="right"><span>Abstract</span></div>
+            </td>
+
+            <td width="711" class="vertical-center">
+              <div align="justify" class="vertical-center">
+                    In this paper, we consider a human-AI collaboration task, fashion design, in augmented reality environment. In particular,
+                    we propose a compensation method of two-stage image generation neural network for generating
+                    fashion design with progressive users' inputs.
+                    Our work is based on a recent proposed deep learning model, pix2pix, that can successfully transform an image from one domain into another domain,
+                    such as from line drawings to color images. However, the pix2pix model relies on the condition that input images should come from the same distribution,
+                    which is usually hard for applying it to real human-computer interaction tasks, where the input from users differs from individual to individual.
+                    To address the problem, we propose a compensation method of two-stage image generation.
+                    In the first stage, we ask users to indicate their design preference with an easy task,
+                    such as tuning clothing landmarks, and use the input to generate a compensation input.
+                    With the compensation input, in the second stage, we then concatenate it with the real sketch from users to generate a perceptual better result.
+                    In addition, to deploy the two-stage image generation neural network in augmented reality environment, we designed and implemented a mobile application where users can create
+                    fashion design referring to real world human models. With the augmented 2D screen and instant feedback from our system, users can design clothing by seamlessly mixing the real and virtual environment.
+                    Through an online experiment with 46 participants and an offline use case study,
+                    we showcase the capability and usability of our system. Finally, we discuss the limitations of our system and further works on human-AI collaborated design.                    
+              </div>
+            </td>
+          </tr>
+
+          <tr>
+            <td bgcolor="#EEEEEE" height="46"><div class="FontStyleMiddle vertical-center" align="right">Supplementary materials</div></td>
+            <td style="vertical-align: middle">
+              <div align="left" class="vertical-center">
+                <a href="https://github.com/zhaozj89/Fashion-Design-with-AI">Source Code and Experiment Details</a>
+              </div>
+            </td>
+          </tr>
+
+          <!-- <tr>
+            <td bgcolor="#EEEEEE" height="154"><div class="FontStyleMiddle vertical-center" align="right">Citation</div></td>
+            <td>
+              <div align="left" class="vertical-center"><span lang="EN-US"> </span>
+                @ARTICLE{7097028, </br>
+                author={Z. Zhao and X. Zhang and Y. Fang}, </br>
+                journal={IEEE Transactions on Image Processing}, </br>
+                title={Stacked Multilayer Self-Organizing Map for Background Modeling}, </br>
+                year={2015}, </br>
+                volume={24}, </br>
+                number={9}, </br>
+                pages={2841-2850}, </br>
+                doi={10.1109/TIP.2015.2427519}, </br>
+                ISSN={1057-7149}, </br>
+                month={Sept},} </br>
+              </div>
+            </td>
+          </tr> -->
+
+          <tr><td colspan="2" height="37"><div align="right"></div></td></tr>
+        </table>
+      </div>
+    </div>
+<script src="jquery.min.js"></script>
+<script src="bootstrap.min.js"></script>
+<script src="popper.min.js"></script>
+</body>
+</html>
