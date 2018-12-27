@@ -1,80 +1,106 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <meta charset="utf-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1">    
-    <link href="bootstrap.min.css" rel="stylesheet" type="text/css"/>
-    <style type="text/css">
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="bootstrap.min.css" rel="stylesheet" type="text/css" />
+  <style type="text/css">
     .FontStyleMiddle {
       font-size: 20px;
       font-family: Arial, Helvetica, sans-serif;
       font-weight: bold;
     }
+
     .FontStyleBig {
       font-size: 24px;
       font-weight: bold;
       font-family: Arial, Helvetica, sans-serif;
     }
-    </style>
-    <title>ShadowPlay2.5D</title>
-  </head>
+  </style>
+  <title>ShadowPlay2.5D</title>
+</head>
 
-  <body>
-    <div class="container">
-      <div class="jumbotron">
-        <div align="center">
-          <span class="FontStyleBig">ShadowPlay2.5D: A Virtual Reality Illustration Authoring Tool for Immersive Appreciation of Classical Chinese Poetry</span>
-        </div>
+<body>
+  <div class="container">
+    <div class="jumbotron">
+      <div align="center"><span class="FontStyleBig">ShadowPlay2.5D: A Virtual Reality Illustration Authoring Tool for
+          Immersive Appreciation of Classical Chinese Poetry</span>
       </div>
+    </div>
 
-      <div style="padding: 20px">
-        <div>
-            <img src="puppetry.png" style="width: 80%; margin: 50px"/>
-        </div>
-        <!-- <div>
-            <strong style="margin: 50px; text-align: center;">(a). Principle of compensation of human controllers; (b). using scenarios of the system (image and AR); (c). user interface.</strong>
-        </div> -->
-      </div>
-
-      <!-- content -->
+    <div style="padding: 20px">
       <div>
-        <table class="table">
-          <tr>
-            <td bgcolor="#EEEEEE" height="231" width="83" style="vertical-align: middle">
-              <div class="FontStyleMiddle vertical-center" align="right"><span>Abstract</span></div>
-            </td>
+        <img src="puppetry.png" style="width: 50%; margin-left: auto; margin-right: auto; display: block;" />
+      </div>
+      <div>
+        <strong style="margin: 50px; text-align: center;">(A) An example of Chinese shadow play: the performer animates
+          the arm piece by fixing one control rod, and manipulating another control rod. (B) Similar to Chinese shadow
+          play, we design ShadowPlay2.5D: users animate the image element by indicating the rigid parts, fixed points,
+          free points first, and then manipulating one rigid part by rotating the free point with a stylus.</strong>
+      </div>
+    </div>
 
-            <td width="711" class="vertical-center">
-              <div align="justify" class="vertical-center">
-                    In this paper, we consider a human-AI collaboration task, fashion design, in augmented reality environment. In particular,
-                    we propose a compensation method of two-stage image generation neural network for generating
-                    fashion design with progressive users' inputs.
-                    Our work is based on a recent proposed deep learning model, pix2pix, that can successfully transform an image from one domain into another domain,
-                    such as from line drawings to color images. However, the pix2pix model relies on the condition that input images should come from the same distribution,
-                    which is usually hard for applying it to real human-computer interaction tasks, where the input from users differs from individual to individual.
-                    To address the problem, we propose a compensation method of two-stage image generation.
-                    In the first stage, we ask users to indicate their design preference with an easy task,
-                    such as tuning clothing landmarks, and use the input to generate a compensation input.
-                    With the compensation input, in the second stage, we then concatenate it with the real sketch from users to generate a perceptual better result.
-                    In addition, to deploy the two-stage image generation neural network in augmented reality environment, we designed and implemented a mobile application where users can create
-                    fashion design referring to real world human models. With the augmented 2D screen and instant feedback from our system, users can design clothing by seamlessly mixing the real and virtual environment.
-                    Through an online experiment with 46 participants and an offline use case study,
-                    we showcase the capability and usability of our system. Finally, we discuss the limitations of our system and further works on human-AI collaborated design.                    
-              </div>
-            </td>
-          </tr>
+    <!-- content -->
+    <div>
+      <table class="table">
+        <tr>
+          <td bgcolor="#EEEEEE" height="231" width="83" style="vertical-align: middle">
+            <div class="FontStyleMiddle vertical-center" align="right"><span>Abstract</span></div>
+          </td>
 
-          <tr>
-            <td bgcolor="#EEEEEE" height="46"><div class="FontStyleMiddle vertical-center" align="right">Supplementary materials</div></td>
-            <td style="vertical-align: middle">
-              <div align="left" class="vertical-center">
-                <a href="https://github.com/zhaozj89/Fashion-Design-with-AI">Source Code and Experiment Details</a>
-              </div>
-            </td>
-          </tr>
+          <td width="711" class="vertical-center">
+            <div align="justify" class="vertical-center">
+              Immersive experience brought by virtual reality (VR) can potentially enhance the appreciation of
+              classical Chinese poetry, which is difficult to be described clearly by language or ordinary media. But
+              making 3D illustrations is usually a labor-intensive and time-consuming procedure, and is hard to master
+              for non-professionals like teachers. Motivated by the homology theory of classical Chinese poetry and
+              painting, we propose an image-based approach of building 2.5 dimension immersive stories to visualize
+              classical Chinese poetry. In particular, using Chinese shadow play as a metaphor, we design and implement
+              ShadowPlay2.5D, a sketch-based authoring tool to help novices create VR illustrations of classical
+              Chinese poetry easily. To ensure coverage of the diverse themes in Chinese poetry and preserve the sense
+              of culture, we build a Chinese ink-painting style image repository of essential poetic elements via
+              crowd-sourcing. To facilitate construction of 2.5D scenes, we design features that support puppet-like
+              animation, instancing, and camera organization in a 3 dimension environment. Through two preliminary user
+              studies, we show that ShadowPlay2.5D is easy to use by novices, and the created 2.5D stylized
+              illustrations can bring better immersive experience for poetry appreciation. In addition, we also explore
+              the potential usage of ShadowPlay2.5D in educational settings by interviewing two Chinese teachers, and
+              provide insights on the bridging between VR technology and Chinese literature education.
+            </div>
+          </td>
+        </tr>
 
-          <!-- <tr>
+        <tr>
+          <td bgcolor="#EEEEEE" height="46" style="vertical-align: middle">
+            <div class="FontStyleMiddle vertical-center" align="right">Displaying in VR</div>
+          </td>
+          <td style="vertical-align: middle">
+            <iframe width="560" height="315" src="https://www.youtube.com/embed/fZ5XxhVG4DM" frameborder="0" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+          </td>
+        </tr>
+
+        <tr>
+          <td bgcolor="#EEEEEE" height="46" style="vertical-align: middle">
+            <div class="FontStyleMiddle vertical-center" align="right">Authoring Process</div>
+          </td>
+          <td style="vertical-align: middle">
+            <iframe width="560" height="315" src="https://www.youtube.com/embed/-6DwekxMD1o" frameborder="0" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+          </td>
+        </tr>
+
+        <tr>
+          <td bgcolor="#EEEEEE" height="46">
+            <div class="FontStyleMiddle vertical-center" align="right">Supplementary materials</div>
+          </td>
+          <td style="vertical-align: middle">
+            <div align="left" class="vertical-center">
+              <a href="https://github.com/zhaozj89/ShadowPlay2.5D">Source code</a>
+            </div>
+          </td>
+        </tr>
+
+        <!-- <tr>
             <td bgcolor="#EEEEEE" height="154"><div class="FontStyleMiddle vertical-center" align="right">Citation</div></td>
             <td>
               <div align="left" class="vertical-center"><span lang="EN-US"> </span>
@@ -93,12 +119,17 @@
             </td>
           </tr> -->
 
-          <tr><td colspan="2" height="37"><div align="right"></div></td></tr>
-        </table>
-      </div>
+        <tr>
+          <td colspan="2" height="37">
+            <div align="right"></div>
+          </td>
+        </tr>
+      </table>
     </div>
-<script src="jquery.min.js"></script>
-<script src="bootstrap.min.js"></script>
-<script src="popper.min.js"></script>
+  </div>
+  <script src="jquery.min.js"></script>
+  <script src="bootstrap.min.js"></script>
+  <script src="popper.min.js"></script>
 </body>
+
 </html>
