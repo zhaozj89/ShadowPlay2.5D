@@ -53,7 +53,7 @@ class OffScreenOperatorDraw(bpy.types.Operator):
         camera_pos = bpy.data.objects['Camera'].location
         camera_orientation = bpy.data.objects['Camera'].rotation_euler[2]
         current_camera = (camera_pos[0],camera_pos[1],camera_orientation)
-        self._opengl_draw(context, self._texture, aspect_ratio, 0.1, ncamera, camera_trajectory, current_camera, objects_pos)
+        self._opengl_draw(context, self._texture, aspect_ratio, 0.2, ncamera, camera_trajectory, current_camera, objects_pos)
 
     @staticmethod
     def handle_add(self, context):

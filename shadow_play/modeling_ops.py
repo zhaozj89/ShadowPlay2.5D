@@ -236,25 +236,34 @@ class ModelingOperatorInstancing(bpy.types.Operator):
                     z_pre = 0
 
                     step = max(1, int(random.gauss(0, 5)))
+                    if context.scene.add_noise==True:
+                        noise_t = 0.6 + random.gauss(0, 0.4)
+                    else:
+                        noise_t = 1.0
                     k = 0
                     while k<N:
                         frame_idx = model_fcurve_x.keyframe_points[k].co[0]
                         if k==0:
-                            x_cur = shift[i][0]
-                            y_cur = shift[i][1]
-                            z_cur = shift[i][2]
+                            delta_x_cur = shift[i][0]
+                            delta_y_cur = shift[i][1]
+                            delta_z_cur = shift[i][2]
                         else:
-                            x_cur = model_fcurve_x.keyframe_points[k].co[1]+x_pre2-x_pre
-                            y_cur = model_fcurve_y.keyframe_points[k].co[1]+y_pre2-y_pre
-                            z_cur = model_fcurve_z.keyframe_points[k].co[1]+z_pre2-z_pre
+                            delta_x_cur = model_fcurve_x.keyframe_points[k].co[1]-x_pre
+                            delta_y_cur = model_fcurve_y.keyframe_points[k].co[1]-y_pre
+                            delta_z_cur = model_fcurve_z.keyframe_points[k].co[1]-z_pre
 
-                        if context.scene.add_noise==True:
-                            offset = random.gauss(0, 0.05)
+                        if k==0:
+                            x_cur = delta_x_cur
+                            y_cur = delta_y_cur
+                            z_cur = delta_z_cur
                         else:
-                            offset = 0.0
-                        fcurve_x.keyframe_points.insert(frame_idx, x_cur+offset, {'FAST'})
-                        fcurve_y.keyframe_points.insert(frame_idx, y_cur+offset, {'FAST'})
-                        fcurve_z.keyframe_points.insert(frame_idx, z_cur+offset, {'FAST'})
+                            x_cur = x_pre2 + noise_t*delta_x_cur
+                            y_cur = y_pre2 + noise_t*delta_y_cur
+                            z_cur = z_pre2 + noise_t*delta_z_cur
+                        
+                        fcurve_x.keyframe_points.insert(frame_idx, x_cur, {'FAST'})
+                        fcurve_y.keyframe_points.insert(frame_idx, y_cur, {'FAST'})
+                        fcurve_z.keyframe_points.insert(frame_idx, z_cur, {'FAST'})
 
                         x_pre = model_fcurve_x.keyframe_points[k].co[1]
                         y_pre = model_fcurve_y.keyframe_points[k].co[1]
