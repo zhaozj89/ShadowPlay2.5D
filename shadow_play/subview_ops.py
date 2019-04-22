@@ -143,7 +143,7 @@ class OffScreenOperatorDraw(bpy.types.Operator):
 
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
 
-        glColor4f(0.8, 0.8, 0.8, 1.0)
+        glColor4f(1.0, 1.0, 1.0, 1.0)
 
         glBegin(GL_QUADS)
         for i in range(4):
@@ -158,7 +158,7 @@ class OffScreenOperatorDraw(bpy.types.Operator):
             point1 = (-1.0+2.0*i/LINE_N,1.0)
             glBegin(GL_LINES)
             glLineWidth(0.1)
-            glColor3f(0.0,0.0,0.0)
+            glColor3f(0.8,0.8,0.8)
             glVertex3f(point0[0],point0[1],0)
             glVertex3f(point1[0],point1[1],0)
             glEnd()
@@ -167,7 +167,7 @@ class OffScreenOperatorDraw(bpy.types.Operator):
             point1 = (1.0,-1.0+2.0*i/LINE_N)
             glBegin(GL_LINES)
             glLineWidth(0.1)
-            glColor3f(0.0,0.0,0.0)
+            glColor3f(0.8,0.8,0.8)
             glVertex3f(point0[0],point0[1],0)
             glVertex3f(point1[0],point1[1],0)
             glEnd()
@@ -175,7 +175,7 @@ class OffScreenOperatorDraw(bpy.types.Operator):
 
         for i in range(ncamera):
             glBegin(GL_TRIANGLES)
-            glColor3f(0.3, 0.8, 0.3)
+            glColor3f(0.5, 0.5, 0.5)
             transform_matrix = mathutils.Matrix.Rotation(camera_trajectory[i][2], 3, 'Z')
             translation = Vector((camera_trajectory[i][0]/20.0, camera_trajectory[i][1]/20.0, 0))
             point0 = transform_matrix * Vector((-0.1,0.1,0)) + translation
@@ -188,8 +188,8 @@ class OffScreenOperatorDraw(bpy.types.Operator):
         if ncamera>1:
             for i in range(ncamera-1):
                 glBegin(GL_LINES);
-                glColor3f(0.5, 1.0, 0.5);
-                glLineWidth(0.2);
+                glColor3f(0.1, 0.1, 0.1);
+                glLineWidth(0.3);
                 glVertex2f(camera_trajectory[i][0]/20.0, camera_trajectory[i][1]/20.0);
                 glVertex2f(camera_trajectory[i+1][0]/20.0, camera_trajectory[i+1][1]/20.0);
                 glEnd();
