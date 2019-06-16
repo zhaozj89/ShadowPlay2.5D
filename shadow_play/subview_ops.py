@@ -40,11 +40,17 @@ class OffScreenOperatorDraw(bpy.types.Operator):
     def draw_callback_px(self, context):
         aspect_ratio = 1.0
         self._update_offscreen(context, self._offscreen)
-        ncamera = len(context.scene.recording_array)
         camera_trajectory = []
         objects_pos = []
+
+        # ncamera = len(context.scene.recording_array)
+        # for i in range(ncamera):
+        #     camera_trajectory.append((context.scene.recording_array[i].camera_position0,context.scene.recording_array[i].camera_position1,context.scene.recording_array[i].camera_rotation_euler))
+
+        the_camera = bpy.data.objects['Camera']
+        ncamera = len(the_camera.animation_data.action.fcurves[0].keyframe_points)
         for i in range(ncamera):
-            camera_trajectory.append((context.scene.recording_array[i].camera_position0,context.scene.recording_array[i].camera_position1,context.scene.recording_array[i].camera_rotation_euler))
+            camera_trajectory.append((the_camera.animation_data.action.fcurves[0].keyframe_points[i].co[1], the_camera.animation_data.action.fcurves[1].keyframe_points[i].co[1], the_camera.animation_data.action.fcurves[5].keyframe_points[i].co[1]))
 
         for obj in bpy.data.objects:
             if obj.name!='Camera':
@@ -178,8 +184,8 @@ class OffScreenOperatorDraw(bpy.types.Operator):
             glColor3f(0.5, 0.5, 0.5)
             transform_matrix = mathutils.Matrix.Rotation(camera_trajectory[i][2], 3, 'Z')
             translation = Vector((camera_trajectory[i][0]/20.0, camera_trajectory[i][1]/20.0, 0))
-            point0 = transform_matrix * Vector((-0.1,0.1,0)) + translation
-            point1 = transform_matrix * Vector((0.1,0.1,0)) + translation
+            point0 = transform_matrix * Vector((-0.06,0.06,0)) + translation
+            point1 = transform_matrix * Vector((0.06,0.06,0)) + translation
             glVertex3f(camera_trajectory[i][0]/20.0, camera_trajectory[i][1]/20.0, 0)
             glVertex3f(point0[0],point0[1],0)
             glVertex3f(point1[0],point1[1],0)
@@ -199,8 +205,8 @@ class OffScreenOperatorDraw(bpy.types.Operator):
         glColor3f(0.8, 0.3, 0.3)
         transform_matrix = mathutils.Matrix.Rotation(current_camera[2], 3, 'Z')
         translation = Vector((current_camera[0]/20.0, current_camera[1]/20.0, 0))
-        point0 = transform_matrix * Vector((-0.1,0.1,0)) + translation
-        point1 = transform_matrix * Vector((0.1,0.1,0)) + translation
+        point0 = transform_matrix * Vector((-0.06,0.06,0)) + translation
+        point1 = transform_matrix * Vector((0.06,0.06,0)) + translation
         glVertex3f(current_camera[0]/20.0, current_camera[1]/20.0, 0)
         glVertex3f(point0[0],point0[1],0)
         glVertex3f(point1[0],point1[1],0)
