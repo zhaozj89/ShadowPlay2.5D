@@ -1,2 +1,0 @@
-Notice that this is only a small demonstration repository. Currently we can only release the complete repository reported in the paper for academic use. If you are interested in getting a copy, please send your name, affiliation, purpose of use
-to zzhaoao@cse.ust.hk
